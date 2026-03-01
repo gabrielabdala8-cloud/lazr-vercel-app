@@ -1,5 +1,11 @@
 {
   "buildCommand": "npm install",
   "outputDirectory": ".",
-  "framework": "express"
+  "framework": "express",
+  "functions": {
+    "server.js": {
+      "memory": 1024,
+      "maxDuration": 60
+    }
+  }
 }

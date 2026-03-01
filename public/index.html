@@ -1,0 +1,820 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>LAZR Discrepancy Dashboard</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<style>
+  :root {
+    --bg: #0d1117; --bg2: #161b22; --bg3: #21262d;
+    --border: #30363d; --text: #e6edf3; --muted: #8b949e;
+    --cyan: #39d0d8; --red: #f85149; --yellow: #e3b341; --green: #3fb950;
+    --blue: #58a6ff;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--bg); color: var(--text); font-family: 'Segoe UI', system-ui, sans-serif; font-size: 14px; }
+  header { background: var(--bg2); border-bottom: 1px solid var(--border); padding: 14px 24px; display: flex; align-items: center; gap: 12px; }
+  header .logo { color: var(--cyan); font-size: 20px; font-weight: 700; letter-spacing: -0.5px; }
+  header .subtitle { color: var(--muted); font-size: 12px; }
+  .main { padding: 24px; max-width: 1400px; margin: 0 auto; }
+
+  /* Upload zone */
+  #upload-zone { border: 2px dashed var(--border); border-radius: 12px; padding: 60px 40px; text-align: center; cursor: pointer; transition: border-color 0.2s; margin-bottom: 24px; }
+  #upload-zone:hover, #upload-zone.drag { border-color: var(--cyan); }
+  #upload-zone .icon { font-size: 48px; margin-bottom: 12px; }
+  #upload-zone h2 { font-size: 18px; margin-bottom: 8px; }
+  #upload-zone p { color: var(--muted); font-size: 13px; }
+  #file-input { display: none; }
+  #progress-bar { display: none; background: var(--bg3); border-radius: 8px; padding: 16px 24px; margin-bottom: 24px; }
+  #progress-bar .label { margin-bottom: 8px; color: var(--muted); }
+  #progress-bar .bar-outer { background: var(--border); border-radius: 4px; height: 6px; }
+  #progress-bar .bar-inner { background: var(--cyan); height: 6px; border-radius: 4px; width: 0%; transition: width 0.3s; }
+
+  /* Dashboard */
+  #dashboard { display: none; }
+  .section-title { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 1px; color: var(--muted); margin-bottom: 12px; margin-top: 24px; }
+
+  /* Custo  /* Filter bar */
+  .filter-bar { background: var(--bg2); border: 1px solid var(--border); border-radius: 8px; padding: 12px 16px; margin-bottom: 20px; display: flex; align-items: flex-start; gap: 12px; flex-wrap: wrap; }  .filter-bar label { color: var(--muted); font-size: 12px; }
+  .filter-bar select, .filter-bar input { background: var(--bg3); border: 1px solid var(--border); color: var(--text); border-radius: 6px; padding: 6px 10px; font-size: 13px; }
+  .filter-bar select:focus, .filter-bar input:focus { outline: none; border-color: var(--cyan); }
+  .btn-reset { background: transparent; border: 1px solid var(--border); color: var(--muted); border-radius: 6px; padding: 6px 12px; cursor: pointer; font-size: 12px; }
+  .btn-reset:hover { border-color: var(--cyan); color: var(--cyan); }
+  
+  /* Order number dropdown */
+  .order-search-container { position: relative; display: inline-block; width: 140px; z-index: 101; }
+  #order-dropdown { position: fixed; background: var(--bg3); border: 1px solid var(--border); border-radius: 6px; max-height: 250px; overflow-y: auto; display: none; z-index: 1001; min-width: 140px; box-shadow: 0 4px 12px rgba(0,0,0,0.3); }
+  #order-dropdown.show { display: block; }
+  .order-option { padding: 8px 10px; cursor: pointer; font-size: 13px; color: var(--text); border-bottom: 1px solid var(--border); }
+  .order-option:last-child { border-bottom: none; }
+  .order-option:hover { background: var(--border); }
+
+  /* KPI cards */
+  .kpi-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 12px; margin-bottom: 24px; }
+  .kpi-card { background: var(--bg2); border: 1px solid var(--border); border-radius: 10px; padding: 16px; }
+  .kpi-card .kpi-label { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 6px; }
+  .kpi-card .kpi-value { font-size: 22px; font-weight: 700; }
+  .kpi-card .kpi-sub { font-size: 11px; color: var(--muted); margin-top: 4px; }
+  .cyan { color: var(--cyan); } .red { color: var(--red); } .yellow { color: var(--yellow); } .green { color: var(--green); }
+
+  /* Charts grid */
+  .charts-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 24px; }
+  .chart-card { background: var(--bg2); border: 1px solid var(--border); border-radius: 10px; padding: 16px; }
+  .chart-card h3 { font-size: 13px; font-weight: 600; margin-bottom: 14px; color: var(--text); }
+  .chart-card canvas { max-height: 260px; }
+  @media (max-width: 900px) { .charts-grid { grid-template-columns: 1fr; } }
+
+  /* Table */
+  .table-card { background: var(--bg2); border: 1px solid var(--border); border-radius: 10px; overflow: hidden; margin-bottom: 24px; }
+  .table-card h3 { font-size: 13px; font-weight: 600; padding: 14px 16px; border-bottom: 1px solid var(--border); }
+  .table-wrap { overflow-x: auto; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th { background: var(--bg3); color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; padding: 10px 14px; text-align: left; cursor: pointer; user-select: none; white-space: nowrap; }
+  th:hover { color: var(--cyan); }
+  td { padding: 10px 14px; border-top: 1px solid var(--border); white-space: nowrap; }
+  tr:hover td { background: var(--bg3); }
+  .badge { display: inline-block; padding: 2px 8px; border-radius: 20px; font-size: 11px; font-weight: 600; }
+  .badge-red { background: rgba(248,81,73,0.15); color: var(--red); }
+  .badge-yellow { background: rgba(227,179,65,0.15); color: var(--yellow); }
+  .badge-green { background: rgba(63,185,80,0.15); color: var(--green); }
+  .badge-blue { background: rgba(88,166,255,0.15); color: var(--blue); }
+
+  /* Tabs */
+  .tabs { display: flex; gap: 4px; margin-bottom: 16px; border-bottom: 1px solid var(--border); }
+  .tab { padding: 8px 16px; cursor: pointer; color: var(--muted); font-size: 13px; border-bottom: 2px solid transparent; margin-bottom: -1px; }
+  .tab.active { color: var(--cyan); border-bottom-color: var(--cyan); }
+  .tab-content { display: none; }
+  .tab-content.active { display: block; }
+
+  .upload-new-btn { background: transparent; border: 1px solid var(--border); color: var(--muted); border-radius: 6px; padding: 6px 14px; cursor: pointer; font-size: 12px; margin-left: auto; }
+  .upload-new-btn:hover { border-color: var(--cyan); color: var(--cyan); }
+
+  /* AI Chat */
+  #ai-chat-panel { position: fixed; bottom: 24px; right: 24px; width: 380px; z-index: 1000; }
+  #ai-chat-toggle { background: var(--cyan); color: #0d1117; border: none; border-radius: 50px; padding: 12px 20px; cursor: pointer; font-size: 14px; font-weight: 700; box-shadow: 0 4px 20px rgba(57,208,216,0.4); display: flex; align-items: center; gap: 8px; margin-left: auto; width: fit-content; }
+  #ai-chat-toggle:hover { background: #2bc0c8; }
+  #ai-chat-box { background: var(--bg2); border: 1px solid var(--border); border-radius: 12px; margin-bottom: 8px; display: none; flex-direction: column; height: 460px; box-shadow: 0 8px 32px rgba(0,0,0,0.5); }
+  #ai-chat-box.open { display: flex; }
+  .chat-header { padding: 14px 16px; border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 10px; }
+  .chat-header .dot { width: 8px; height: 8px; background: var(--green); border-radius: 50%; }
+  .chat-header span { font-size: 13px; font-weight: 600; }
+  .chat-header .close-btn { margin-left: auto; background: none; border: none; color: var(--muted); cursor: pointer; font-size: 18px; line-height: 1; }
+  .chat-messages { flex: 1; overflow-y: auto; padding: 14px; display: flex; flex-direction: column; gap: 10px; }
+  .chat-msg { max-width: 85%; padding: 10px 14px; border-radius: 10px; font-size: 13px; line-height: 1.5; }
+  .chat-msg.user { background: rgba(57,208,216,0.15); color: var(--cyan); align-self: flex-end; border-bottom-right-radius: 2px; }
+  .chat-msg.ai { background: var(--bg3); color: var(--text); align-self: flex-start; border-bottom-left-radius: 2px; }
+  .chat-msg.thinking { color: var(--muted); font-style: italic; }
+  .chat-input-row { padding: 12px; border-top: 1px solid var(--border); display: flex; gap: 8px; }
+  .chat-input-row input { flex: 1; background: var(--bg3); border: 1px solid var(--border); color: var(--text); border-radius: 8px; padding: 8px 12px; font-size: 13px; outline: none; }
+  .chat-input-row input:focus { border-color: var(--cyan); }
+  .chat-input-row button { background: var(--cyan); color: #0d1117; border: none; border-radius: 8px; padding: 8px 14px; cursor: pointer; font-size: 13px; font-weight: 600; }
+  .chat-input-row button:disabled { opacity: 0.5; cursor: not-allowed; }
+  .chat-suggestions { display: flex; flex-wrap: wrap; gap: 6px; padding: 0 14px 10px; }
+  .chip { background: var(--bg3); border: 1px solid var(--border); color: var(--muted); border-radius: 20px; padding: 4px 10px; font-size: 11px; cursor: pointer; }
+  .chip:hover { border-color: var(--cyan); color: var(--cyan); }
+</style>
+</head>
+<body>
+<header>
+  <div>
+    <div class="logo">⚡ LAZR Discrepancy Agent</div>
+    <div class="subtitle" id="header-subtitle">Upload your CSV to begin analysis</div>
+  </div>
+  <button class="upload-new-btn" id="btn-upload-new" style="display:none" onclick="resetDashboard()">↑ Upload New CSV</button>
+</header>
+
+<div class="main">
+  <!-- Upload Zone -->
+  <div id="upload-zone" onclick="document.getElementById('file-input').click()" 
+       ondragover="event.preventDefault();this.classList.add('drag')"
+       ondragleave="this.classList.remove('drag')"
+       ondrop="handleDrop(event)">
+    <div class="icon">📂</div>
+    <h2>Upload your LAZR export CSV</h2>
+    <p>Drag & drop or click to browse · CSV files only</p>
+    <p style="margin-top:8px; font-size:12px; color:#58a6ff">Supports large files (43MB+) · Parsed entirely in your browser · No data sent to server</p>
+    <input type="file" id="file-input" accept=".csv" onchange="handleFile(event)">
+  </div>
+
+  <!-- Progress -->
+  <div id="progress-bar">
+    <div class="label" id="progress-label">Parsing CSV…</div>
+    <div class="bar-outer"><div class="bar-inner" id="bar-inner"></div></div>
+  </div>
+
+  <!-- Dashboard -->
+  <div id="dashboard">
+    <!-- Filter bar -->
+    <div class="filter-bar">
+      <label>Order #:</label>
+      <div class="order-search-container">
+        <input type="text" id="filter-order-number" placeholder="Search order..." onchange="applyFilters()" oninput="showOrderDropdown()" style="width: 140px;">
+        <div id="order-dropdown"></div>
+      </div>
+      <label>Date From:</label>
+      <input type="date" id="filter-date-from" onchange="applyFilters()">
+      <label>Date To:</label>
+      <input type="date" id="filter-date-to" onchange="applyFilters()">
+      <label>Customer:</label>
+      <select id="filter-customer" onchange="applyFilters()">
+        <option value="">All</option>
+      </select>
+      <label>Transport:</label>
+      <select id="filter-transport" onchange="applyFilters()">
+        <option value="">All</option>
+      </select>
+      <label>Service:</label>
+      <select id="filter-service" onchange="applyFilters()">
+        <option value="">All</option>
+      </select>
+      <label>Carrier:</label>
+      <select id="filter-carrier" onchange="applyFilters()">
+        <option value="">All</option>
+      </select>
+      <button class="btn-reset" onclick="resetFilters()">Reset Filters</button>
+    </div>
+
+    <!-- KPI Cards -->
+    <div class="section-title">Overview</div>
+    <div class="kpi-grid">
+      <div class="kpi-card"><div class="kpi-label">Total Orders</div><div class="kpi-value cyan" id="kpi-orders">—</div></div>
+      <div class="kpi-card"><div class="kpi-label">Total Quoted</div><div class="kpi-value" id="kpi-quoted">—</div></div>
+      <div class="kpi-card"><div class="kpi-label">Total Billed</div><div class="kpi-value" id="kpi-billed">—</div></div>
+      <div class="kpi-card"><div class="kpi-label">Total Discrepancy</div><div class="kpi-value red" id="kpi-disc">—</div><div class="kpi-sub" id="kpi-disc-pct">—</div></div>
+      <div class="kpi-card"><div class="kpi-label">Overcharged Orders</div><div class="kpi-value red" id="kpi-over">—</div></div>
+      <div class="kpi-card"><div class="kpi-label">Undercharged Orders</div><div class="kpi-value yellow" id="kpi-under">—</div></div>
+      <div class="kpi-card"><div class="kpi-label">Exact Match</div><div class="kpi-value green" id="kpi-match">—</div></div>
+      <div class="kpi-card"><div class="kpi-label">Avg Disc / Order</div><div class="kpi-value" id="kpi-avg">—</div></div>
+    </div>
+
+    <!-- Tabs for KPI breakdowns -->
+    <div class="section-title">KPI Breakdowns</div>
+    <div class="tabs">
+      <div class="tab active" onclick="switchTab('transport')">Transport Type</div>
+      <div class="tab" onclick="switchTab('service')">Service Type</div>
+      <div class="tab" onclick="switchTab('lane')">Lane</div>
+      <div class="tab" onclick="switchTab('origin')">Origin Country</div>
+      <div class="tab" onclick="switchTab('destination')">Destination</div>
+      <div class="tab" onclick="switchTab('carrier')">Carrier</div>
+    </div>
+
+    <div id="tab-transport" class="tab-content active">
+      <div class="charts-grid">
+        <div class="chart-card"><h3>Discrepancy by Transport Type (CAD)</h3><canvas id="chart-transport-disc"></canvas></div>
+        <div class="chart-card"><h3>Order Count by Transport Type</h3><canvas id="chart-transport-orders"></canvas></div>
+      </div>
+      <div class="table-card"><h3>Transport Type Breakdown</h3><div class="table-wrap"><table id="tbl-transport"></table></div></div>
+    </div>
+
+    <div id="tab-service" class="tab-content">
+      <div class="charts-grid">
+        <div class="chart-card"><h3>Discrepancy by Service Type (CAD)</h3><canvas id="chart-service-disc"></canvas></div>
+        <div class="chart-card"><h3>Order Count by Service Type</h3><canvas id="chart-service-orders"></canvas></div>
+      </div>
+      <div class="table-card"><h3>Service Type Breakdown</h3><div class="table-wrap"><table id="tbl-service"></table></div></div>
+    </div>
+
+    <div id="tab-lane" class="tab-content">
+      <div class="charts-grid">
+        <div class="chart-card"><h3>Top 10 Lanes by Discrepancy (CAD)</h3><canvas id="chart-lane-disc"></canvas></div>
+        <div class="chart-card"><h3>Top 10 Lanes by Order Count</h3><canvas id="chart-lane-orders"></canvas></div>
+      </div>
+      <div class="table-card"><h3>Lane Breakdown</h3><div class="table-wrap"><table id="tbl-lane"></table></div></div>
+    </div>
+
+    <div id="tab-origin" class="tab-content">
+      <div class="charts-grid">
+        <div class="chart-card"><h3>Discrepancy by Origin Country (CAD)</h3><canvas id="chart-origin-disc"></canvas></div>
+        <div class="chart-card"><h3>Order Count by Origin Country</h3><canvas id="chart-origin-orders"></canvas></div>
+      </div>
+      <div class="table-card"><h3>Origin Country Breakdown</h3><div class="table-wrap"><table id="tbl-origin"></table></div></div>
+    </div>
+
+    <div id="tab-destination" class="tab-content">
+      <div class="charts-grid">
+        <div class="chart-card"><h3>Top 10 Destinations by Discrepancy (CAD)</h3><canvas id="chart-dest-disc"></canvas></div>
+        <div class="chart-card"><h3>Top 10 Destinations by Order Count</h3><canvas id="chart-dest-orders"></canvas></div>
+      </div>
+      <div class="table-card"><h3>Destination Breakdown</h3><div class="table-wrap"><table id="tbl-dest"></table></div></div>
+    </div>
+
+    <div id="tab-carrier" class="tab-content">
+      <div class="charts-grid">
+        <div class="chart-card"><h3>Discrepancy by Carrier (CAD)</h3><canvas id="chart-carrier-disc"></canvas></div>
+        <div class="chart-card"><h3>Order Count by Carrier</h3><canvas id="chart-carrier-orders"></canvas></div>
+      </div>
+      <div class="table-card"><h3>Carrier Breakdown</h3><div class="table-wrap"><table id="tbl-carrier"></table></div></div>
+    </div>
+
+    <!-- Customer table -->
+    <div class="section-title">Customer Breakdown</div>
+    <div class="table-card">
+      <h3>All Customers — Discrepancy Summary</h3>
+      <div class="table-wrap"><table id="tbl-customers"></table></div>
+    </div>
+  </div>
+</div>
+
+<!-- AI Chat Panel -->
+<div id="ai-chat-panel">
+  <div id="ai-chat-box">
+    <div class="chat-header">
+      <div class="dot"></div>
+      <span>AI Discrepancy Analyst</span>
+      <button class="close-btn" onclick="toggleChat()">×</button>
+    </div>
+    <div class="chat-messages" id="chat-messages"></div>
+    <div class="chat-suggestions">
+      <span class="chip" onclick="chipAsk('Which customer has the highest overcharge?')">Top overcharge</span>
+      <span class="chip" onclick="chipAsk('Summarize discrepancies by carrier')">By carrier</span>
+      <span class="chip" onclick="chipAsk('Which transport type has the most discrepancies?')">By transport</span>
+      <span class="chip" onclick="chipAsk('What are the top 5 lanes with discrepancies?')">Top lanes</span>
+      <span class="chip" onclick="chipAsk('Analyze AMD MEDICOM INC discrepancies')">AMD MEDICOM</span>
+    </div>
+    <div class="chat-input-row">
+      <input type="text" id="chat-input" placeholder="Ask about discrepancies…" onkeydown="if(event.key==='Enter') sendChat()">
+      <button id="chat-send" onclick="sendChat()">Send</button>
+    </div>
+  </div>
+  <button id="ai-chat-toggle" onclick="toggleChat()">🤖 AI Agent</button>
+</div>
+
+<script>
+// ============================================================
+// Global state
+// ============================================================
+let allOrders = [];
+let filteredOrders = [];
+let charts = {};
+
+const VALID_STATUSES = new Set(['TRANSPORT','BILLING','COMPLETED','RESERVATION']);
+
+// ============================================================
+// CSV Parsing
+// ============================================================
+function parseCSV(text) {
+  const lines = text.split('\n');
+  if (lines.length < 2) return [];
+  
+  // Parse header
+  const headers = parseCSVLine(lines[0]);
+  const idx = {};
+  headers.forEach((h, i) => { idx[h.trim().replace(/"/g,'')] = i; });
+
+  const COL = {
+    orderNum: idx['Order Number'],
+    status: idx['Order Status'],
+    transport: idx['Transport Type'],
+    service: idx['Service Type'],
+    orgName: idx['Organization Name'],
+    originCountry: idx['Origin Country'],
+    destCountry: idx['Destination Country'],
+    destCity: idx['Destination City'],
+    destState: idx['Destination State'],
+    lane: idx['Lane (Origin -> Destination Province)'],
+    carrier: idx['Carrier Name'],
+    selling: idx['Selling Price (CAD)'],
+    billed: idx['Billed Selling Price (CAD)'],
+  };
+
+  const orders = [];
+  for (let i = 1; i < lines.length; i++) {
+    const line = lines[i].trim();
+    if (!line) continue;
+    const cols = parseCSVLine(line);
+    
+    const status = (cols[COL.status] || '').replace(/"/g,'').trim();
+    if (!VALID_STATUSES.has(status)) continue;
+
+    const selling = parseFloat((cols[COL.selling] || '0').replace(/"/g,'')) || 0;
+    const billed = parseFloat((cols[COL.billed] || '0').replace(/"/g,'')) || 0;
+    const disc = billed - selling;
+
+    orders.push({
+      orderNum: (cols[COL.orderNum] || '').replace(/"/g,''),
+      status,
+      transport: (cols[COL.transport] || '').replace(/"/g,'').trim() || 'Unknown',
+      service: (cols[COL.service] || '').replace(/"/g,'').trim() || 'Unknown',
+      org: (cols[COL.orgName] || '').replace(/"/g,'').trim() || 'Unknown',
+      originCountry: (cols[COL.originCountry] || '').replace(/"/g,'').trim() || 'Unknown',
+      destCountry: (cols[COL.destCountry] || '').replace(/"/g,'').trim() || 'Unknown',
+      destCity: (cols[COL.destCity] || '').replace(/"/g,'').trim(),
+      destState: (cols[COL.destState] || '').replace(/"/g,'').trim(),
+      lane: (cols[COL.lane] || '').replace(/"/g,'').trim() || 'Unknown',
+      carrier: (cols[COL.carrier] || '').replace(/"/g,'').trim() || 'Unknown',
+      selling,
+      billed,
+      disc,
+    });
+  }
+  return orders;
+}
+
+function parseCSVLine(line) {
+  const result = [];
+  let cur = '';
+  let inQuote = false;
+  for (let i = 0; i < line.length; i++) {
+    const c = line[i];
+    if (c === '"') {
+      if (inQuote && line[i+1] === '"') { cur += '"'; i++; }
+      else inQuote = !inQuote;
+    } else if (c === ',' && !inQuote) {
+      result.push(cur);
+      cur = '';
+    } else {
+      cur += c;
+    }
+  }
+  result.push(cur);
+  return result;
+}
+
+// ============================================================
+// File handling
+// ============================================================
+function handleDrop(e) {
+  e.preventDefault();
+  document.getElementById('upload-zone').classList.remove('drag');
+  const file = e.dataTransfer.files[0];
+  if (file) processFile(file);
+}
+
+function handleFile(e) {
+  const file = e.target.files[0];
+  if (file) processFile(file);
+}
+
+function processFile(file) {
+  if (!file.name.endsWith('.csv')) { alert('Please upload a CSV file.'); return; }
+  
+  document.getElementById('upload-zone').style.display = 'none';
+  const progressEl = document.getElementById('progress-bar');
+  progressEl.style.display = 'block';
+  setProgress(10, `Reading ${file.name} (${(file.size/1024/1024).toFixed(1)} MB)…`);
+
+  const reader = new FileReader();
+  reader.onprogress = (e) => {
+    if (e.lengthComputable) setProgress(10 + (e.loaded/e.total)*40, 'Reading file…');
+  };
+  reader.onload = (e) => {
+    setProgress(55, 'Parsing CSV rows…');
+    setTimeout(() => {
+      allOrders = parseCSV(e.target.result);
+      setProgress(80, `Parsed ${allOrders.length.toLocaleString()} orders. Building dashboard…`);
+      setTimeout(() => {
+        populateFilters();
+        filteredOrders = [...allOrders];
+        renderDashboard();
+        setProgress(100, 'Done!');
+        setTimeout(() => {
+          progressEl.style.display = 'none';
+          document.getElementById('dashboard').style.display = 'block';
+          document.getElementById('btn-upload-new').style.display = 'block';
+          document.getElementById('header-subtitle').textContent = 
+            `${allOrders.length.toLocaleString()} orders loaded from ${file.name}`;
+        }, 400);
+      }, 50);
+    }, 50);
+  };
+  reader.readAsText(file);
+}
+
+function setProgress(pct, label) {
+  document.getElementById('bar-inner').style.width = pct + '%';
+  document.getElementById('progress-label').textContent = label;
+}
+
+function resetDashboard() {
+  allOrders = []; filteredOrders = [];
+  Object.values(charts).forEach(c => c.destroy());
+  charts = {};
+  document.getElementById('upload-zone').style.display = 'block';
+  document.getElementById('dashboard').style.display = 'none';
+  document.getElementById('btn-upload-new').style.display = 'none';
+  document.getElementById('file-input').value = '';
+  document.getElementById('header-subtitle').textContent = 'Upload your CSV to begin analysis';
+}
+
+// ============================================================
+// Filters
+// ============================================================
+function populateFilters() {
+  const customers = [...new Set(allOrders.map(o => o.org))].sort();
+  const transports = [...new Set(allOrders.map(o => o.transport))].sort();
+  const services = [...new Set(allOrders.map(o => o.service))].sort();
+  const carriers = [...new Set(allOrders.map(o => o.carrier))].sort();
+
+  fillSelect('filter-customer', customers);
+  fillSelect('filter-transport', transports);
+  fillSelect('filter-service', services);
+  fillSelect('filter-carrier', carriers);
+}
+
+function fillSelect(id, values) {
+  const sel = document.getElementById(id);
+  const first = sel.options[0];
+  sel.innerHTML = '';
+  sel.appendChild(first);
+  values.forEach(v => {
+    const opt = document.createElement('option');
+    opt.value = v; opt.textContent = v;
+    sel.appendChild(opt);
+  });
+}
+
+function applyFilters() {
+  const customer = document.getElementById('filter-customer').value;
+  const transport = document.getElementById('filter-transport').value;
+  const service = document.getElementById('filter-service').value;
+  const carrier = document.getElementById('filter-carrier').value;
+  const orderNumber = document.getElementById('filter-order-number').value.toLowerCase();
+  const dateFrom = document.getElementById('filter-date-from').value;
+  const dateTo = document.getElementById('filter-date-to').value;
+
+  filteredOrders = allOrders.filter(o => {
+    if (customer && o.org !== customer) return false;
+    if (transport && o.transport !== transport) return false;
+    if (service && o.service !== service) return false;
+    if (carrier && o.carrier !== carrier) return false;
+    if (orderNumber && !o.order.toLowerCase().includes(orderNumber)) return false;
+    if (dateFrom && o.date < dateFrom) return false;
+    if (dateTo && o.date > dateTo) return false;
+    return true;
+  });
+  renderDashboard();
+}
+
+function resetFilters() {
+  ['filter-customer','filter-transport','filter-service','filter-carrier','filter-order-number','filter-date-from','filter-date-to'].forEach(id => {
+    document.getElementById(id).value = '';
+  });
+  document.getElementById('order-dropdown').classList.remove('show');
+  filteredOrders = [...allOrders];
+  renderDashboard();
+}
+
+function showOrderDropdown() {
+  const input = document.getElementById('filter-order-number').value.toLowerCase();
+  const dropdown = document.getElementById('order-dropdown');
+  const inputEl = document.getElementById('filter-order-number');
+  if (!input) { dropdown.classList.remove('show'); return; }
+  const uniqueOrders = [...new Set(allOrders.map(o => o.order))].sort();
+  const matches = uniqueOrders.filter(o => o.toLowerCase().includes(input)).slice(0, 15);
+  dropdown.innerHTML = matches.map(order => '<div class="order-option" onclick="selectOrder(\"' + order + '\")">'+order+'</div>').join('');
+  if (matches.length > 0) {
+    const rect = inputEl.getBoundingClientRect();
+    dropdown.style.top = (rect.bottom + 2) + 'px';
+    dropdown.style.left = rect.left + 'px';
+    dropdown.classList.add('show');
+  } else {
+    dropdown.classList.remove('show');
+  }
+}
+
+function selectOrder(order) {
+  document.getElementById('filter-order-number').value = order;
+  document.getElementById('order-dropdown').classList.remove('show');
+  applyFilters();
+}
+
+// ============================================================
+// Aggregation helpers
+// ============================================================
+function groupBy(orders, key) {
+  const map = new Map();
+  for (const o of orders) {
+    const k = o[key] || 'Unknown';
+    if (!map.has(k)) map.set(k, { label: k, orders: 0, selling: 0, billed: 0, disc: 0, over: 0, under: 0, match: 0 });
+    const g = map.get(k);
+    g.orders++;
+    g.selling += o.selling;
+    g.billed += o.billed;
+    g.disc += o.disc;
+    if (o.disc > 0.01) g.over++;
+    else if (o.disc < -0.01) g.under++;
+    else g.match++;
+  }
+  return [...map.values()];
+}
+
+function groupByDest(orders) {
+  const map = new Map();
+  for (const o of orders) {
+    const k = o.destCity ? `${o.destCity}, ${o.destState || o.destCountry}` : (o.destCountry || 'Unknown');
+    if (!map.has(k)) map.set(k, { label: k, orders: 0, selling: 0, billed: 0, disc: 0, over: 0, under: 0, match: 0 });
+    const g = map.get(k);
+    g.orders++;
+    g.selling += o.selling;
+    g.billed += o.billed;
+    g.disc += o.disc;
+    if (o.disc > 0.01) g.over++;
+    else if (o.disc < -0.01) g.under++;
+    else g.match++;
+  }
+  return [...map.values()];
+}
+
+// ============================================================
+// Render Dashboard
+// ============================================================
+function renderDashboard() {
+  const orders = filteredOrders;
+  const totalOrders = orders.length;
+  const totalSelling = orders.reduce((s,o) => s+o.selling, 0);
+  const totalBilled = orders.reduce((s,o) => s+o.billed, 0);
+  const totalDisc = orders.reduce((s,o) => s+o.disc, 0);
+  const over = orders.filter(o => o.disc > 0.01).length;
+  const under = orders.filter(o => o.disc < -0.01).length;
+  const match = orders.filter(o => Math.abs(o.disc) <= 0.01).length;
+  const avgDisc = totalOrders > 0 ? totalDisc / totalOrders : 0;
+
+  document.getElementById('kpi-orders').textContent = totalOrders.toLocaleString();
+  document.getElementById('kpi-quoted').textContent = '$' + fmt(totalSelling);
+  document.getElementById('kpi-billed').textContent = '$' + fmt(totalBilled);
+  document.getElementById('kpi-disc').textContent = (totalDisc >= 0 ? '+' : '') + '$' + fmt(totalDisc);
+  document.getElementById('kpi-disc-pct').textContent = totalSelling > 0 ? ((totalDisc/totalSelling)*100).toFixed(2) + '% of quoted' : '';
+  document.getElementById('kpi-over').textContent = over.toLocaleString();
+  document.getElementById('kpi-under').textContent = under.toLocaleString();
+  document.getElementById('kpi-match').textContent = match.toLocaleString();
+  document.getElementById('kpi-avg').textContent = (avgDisc >= 0 ? '+' : '') + '$' + fmt(avgDisc);
+
+  // KPI breakdowns
+  renderKpiTab('transport', groupBy(orders, 'transport'), 'chart-transport-disc', 'chart-transport-orders', 'tbl-transport');
+  renderKpiTab('service', groupBy(orders, 'service'), 'chart-service-disc', 'chart-service-orders', 'tbl-service');
+  renderKpiTab('lane', groupBy(orders, 'lane').sort((a,b) => Math.abs(b.disc)-Math.abs(a.disc)), 'chart-lane-disc', 'chart-lane-orders', 'tbl-lane', 10);
+  renderKpiTab('origin', groupBy(orders, 'originCountry'), 'chart-origin-disc', 'chart-origin-orders', 'tbl-origin');
+  renderKpiTab('dest', groupByDest(orders).sort((a,b) => Math.abs(b.disc)-Math.abs(a.disc)), 'chart-dest-disc', 'chart-dest-orders', 'tbl-dest', 10);
+  renderKpiTab('carrier', groupBy(orders, 'carrier'), 'chart-carrier-disc', 'chart-carrier-orders', 'tbl-carrier');
+
+  // Customer table
+  renderCustomerTable(groupBy(orders, 'org').sort((a,b) => Math.abs(b.disc)-Math.abs(a.disc)));
+}
+
+function fmt(n) {
+  return Math.abs(n).toLocaleString('en-CA', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+function renderKpiTab(key, data, chartDiscId, chartOrdersId, tableId, topN) {
+  const display = topN ? data.slice(0, topN) : data;
+  const labels = display.map(d => d.label);
+  const discValues = display.map(d => d.disc);
+  const orderValues = display.map(d => d.orders);
+
+  const colors = discValues.map(v => v > 0 ? 'rgba(248,81,73,0.7)' : v < 0 ? 'rgba(227,179,65,0.7)' : 'rgba(63,185,80,0.7)');
+  const borderColors = discValues.map(v => v > 0 ? '#f85149' : v < 0 ? '#e3b341' : '#3fb950');
+
+  renderBarChart(chartDiscId, labels, discValues, colors, borderColors, 'CAD $');
+  renderBarChart(chartOrdersId, labels, orderValues, Array(labels.length).fill('rgba(57,208,216,0.6)'), Array(labels.length).fill('#39d0d8'), 'Orders');
+
+  // Table
+  const tbl = document.getElementById(tableId);
+  tbl.innerHTML = `<thead><tr>
+    <th>${key.charAt(0).toUpperCase()+key.slice(1)}</th>
+    <th>Orders</th>
+    <th>Quoted (CAD)</th>
+    <th>Billed (CAD)</th>
+    <th>Discrepancy (CAD)</th>
+    <th>Disc %</th>
+    <th>Overcharged</th>
+    <th>Undercharged</th>
+    <th>Match</th>
+  </tr></thead><tbody>${data.map(d => {
+    const discPct = d.selling > 0 ? ((d.disc/d.selling)*100).toFixed(2) : '0.00';
+    const badge = d.disc > 0.01 ? 'badge-red' : d.disc < -0.01 ? 'badge-yellow' : 'badge-green';
+    const sign = d.disc >= 0 ? '+' : '';
+    return `<tr>
+      <td>${d.label}</td>
+      <td>${d.orders.toLocaleString()}</td>
+      <td>$${fmt(d.selling)}</td>
+      <td>$${fmt(d.billed)}</td>
+      <td><span class="badge ${badge}">${sign}$${fmt(d.disc)}</span></td>
+      <td>${discPct}%</td>
+      <td>${d.over.toLocaleString()}</td>
+      <td>${d.under.toLocaleString()}</td>
+      <td>${d.match.toLocaleString()}</td>
+    </tr>`;
+  }).join('')}</tbody>`;
+}
+
+function renderCustomerTable(data) {
+  const tbl = document.getElementById('tbl-customers');
+  tbl.innerHTML = `<thead><tr>
+    <th>Customer</th>
+    <th>Orders</th>
+    <th>Quoted (CAD)</th>
+    <th>Billed (CAD)</th>
+    <th>Discrepancy (CAD)</th>
+    <th>Disc %</th>
+    <th>Severity</th>
+  </tr></thead><tbody>${data.map(d => {
+    const discPct = d.selling > 0 ? Math.abs((d.disc/d.selling)*100) : 0;
+    const severity = discPct > 10 ? ['badge-red','CRITICAL'] : discPct > 5 ? ['badge-yellow','HIGH'] : discPct > 1 ? ['badge-blue','MEDIUM'] : ['badge-green','LOW'];
+    const sign = d.disc >= 0 ? '+' : '';
+    return `<tr>
+      <td>${d.label}</td>
+      <td>${d.orders.toLocaleString()}</td>
+      <td>$${fmt(d.selling)}</td>
+      <td>$${fmt(d.billed)}</td>
+      <td style="color:${d.disc > 0.01 ? 'var(--red)' : d.disc < -0.01 ? 'var(--yellow)' : 'var(--green)'}">${sign}$${fmt(d.disc)}</td>
+      <td>${discPct.toFixed(2)}%</td>
+      <td><span class="badge ${severity[0]}">${severity[1]}</span></td>
+    </tr>`;
+  }).join('')}</tbody>`;
+}
+
+function renderBarChart(canvasId, labels, data, bgColors, borderColors, yLabel) {
+  if (charts[canvasId]) { charts[canvasId].destroy(); delete charts[canvasId]; }
+  const ctx = document.getElementById(canvasId);
+  if (!ctx) return;
+  charts[canvasId] = new Chart(ctx, {
+    type: 'bar',
+    data: { labels, datasets: [{ data, backgroundColor: bgColors, borderColor: borderColors, borderWidth: 1 }] },
+    options: {
+      responsive: true, maintainAspectRatio: true,
+      plugins: { legend: { display: false } },
+      scales: {
+        x: { ticks: { color: '#8b949e', font: { size: 11 } }, grid: { color: 'rgba(48,54,61,0.5)' } },
+        y: { ticks: { color: '#8b949e', font: { size: 11 } }, grid: { color: 'rgba(48,54,61,0.5)' }, title: { display: true, text: yLabel, color: '#8b949e', font: { size: 11 } } }
+      }
+    }
+  });
+}
+
+// ============================================================
+// Tabs
+// ============================================================
+  // ============================================================
+  // AI Chat Agent
+  // ============================================================
+  let chatOpen = false;
+  let chatHistory = [];
+  let dataContext = null;
+
+  function buildDataContext() {
+    const orders = filteredOrders.length > 0 ? filteredOrders : allOrders;
+    if (orders.length === 0) return null;
+
+    const totalSelling = orders.reduce((s,o) => s+o.selling, 0);
+    const totalBilled = orders.reduce((s,o) => s+o.billed, 0);
+    const totalDisc = orders.reduce((s,o) => s+o.disc, 0);
+    const over = orders.filter(o => o.disc > 0.01);
+    const under = orders.filter(o => o.disc < -0.01);
+
+    const byCustomer = groupBy(orders, 'org').sort((a,b) => Math.abs(b.disc)-Math.abs(a.disc));
+    const byTransport = groupBy(orders, 'transport').sort((a,b) => Math.abs(b.disc)-Math.abs(a.disc));
+    const byService = groupBy(orders, 'service').sort((a,b) => Math.abs(b.disc)-Math.abs(a.disc));
+    const byCarrier = groupBy(orders, 'carrier').sort((a,b) => Math.abs(b.disc)-Math.abs(a.disc));
+    const byLane = groupBy(orders, 'lane').sort((a,b) => Math.abs(b.disc)-Math.abs(a.disc));
+    const byOrigin = groupBy(orders, 'originCountry').sort((a,b) => Math.abs(b.disc)-Math.abs(a.disc));
+
+    return `You are a logistics billing analyst AI assistant. Analyze discrepancies between quoted (Selling Price CAD) and billed (Billed Selling Price CAD) prices.
+Positive discrepancy = customer was OVERCHARGED (billed > quoted). Negative = UNDERCHARGED.
+
+DATA SUMMARY (${orders.length.toLocaleString()} orders):
+- Total Quoted: $${fmt(totalSelling)} CAD
+- Total Billed: $${fmt(totalBilled)} CAD  
+- Net Discrepancy: ${totalDisc >= 0 ? '+' : ''}$${fmt(totalDisc)} CAD
+- Overcharged orders: ${over.length.toLocaleString()} ($${fmt(over.reduce((s,o)=>s+o.disc,0))} CAD)
+- Undercharged orders: ${under.length.toLocaleString()} ($${fmt(Math.abs(under.reduce((s,o)=>s+o.disc,0)))} CAD)
+
+TOP CUSTOMERS BY DISCREPANCY:
+${byCustomer.slice(0,10).map(c => `- ${c.label}: ${c.orders} orders, disc=${c.disc>=0?'+':''}$${fmt(c.disc)} CAD (${c.selling>0?((c.disc/c.selling)*100).toFixed(1):0}% of quoted)`).join('\n')}
+
+BY TRANSPORT TYPE:
+${byTransport.map(c => `- ${c.label}: ${c.orders} orders, disc=${c.disc>=0?'+':''}$${fmt(c.disc)} CAD`).join('\n')}
+
+BY SERVICE TYPE:
+${byService.slice(0,8).map(c => `- ${c.label}: ${c.orders} orders, disc=${c.disc>=0?'+':''}$${fmt(c.disc)} CAD`).join('\n')}
+
+BY CARRIER:
+${byCarrier.slice(0,8).map(c => `- ${c.label}: ${c.orders} orders, disc=${c.disc>=0?'+':''}$${fmt(c.disc)} CAD`).join('\n')}
+
+TOP LANES BY DISCREPANCY:
+${byLane.slice(0,8).map(c => `- ${c.label}: ${c.orders} orders, disc=${c.disc>=0?'+':''}$${fmt(c.disc)} CAD`).join('\n')}
+
+BY ORIGIN COUNTRY:
+${byOrigin.map(c => `- ${c.label}: ${c.orders} orders, disc=${c.disc>=0?'+':''}$${fmt(c.disc)} CAD`).join('\n')}
+
+Answer concisely and accurately. Use CAD currency. Be direct and professional. If asked about a specific customer, search the customer list above.`;
+  }
+
+  function toggleChat() {
+    chatOpen = !chatOpen;
+    const box = document.getElementById('ai-chat-box');
+    box.classList.toggle('open', chatOpen);
+    if (chatOpen && chatHistory.length === 0) {
+      addChatMsg('ai', '👋 Hi! I\'m your discrepancy analyst. Upload a CSV and ask me anything — e.g. "Which customer has the highest overcharge?" or "Summarize discrepancies by carrier".');
+    }
+  }
+
+  function addChatMsg(role, text) {
+    chatHistory.push({role, text});
+    const msgs = document.getElementById('chat-messages');
+    const div = document.createElement('div');
+    div.className = `chat-msg ${role}`;
+    div.textContent = text;
+    msgs.appendChild(div);
+    msgs.scrollTop = msgs.scrollHeight;
+    return div;
+  }
+
+  async function sendChat() {
+    const input = document.getElementById('chat-input');
+    const btn = document.getElementById('chat-send');
+    const msg = input.value.trim();
+    if (!msg) return;
+    if (allOrders.length === 0) { addChatMsg('ai', 'Please upload a CSV file first so I have data to analyze.'); return; }
+
+    input.value = '';
+    btn.disabled = true;
+    addChatMsg('user', msg);
+    const thinking = addChatMsg('ai', '⏳ Analyzing...');
+    thinking.classList.add('thinking');
+
+    try {
+      const context = buildDataContext();
+      const messages = [
+        { role: 'system', content: context },
+        ...chatHistory.filter(m => m.role !== 'ai' || !m.text.startsWith('⏳')).slice(-6).map(m => ({ role: m.role === 'user' ? 'user' : 'assistant', content: m.text })),
+        { role: 'user', content: msg }
+      ];
+
+      const res = await fetch('/api/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ messages })
+      });
+
+      if (!res.ok) throw new Error(`API error ${res.status}`);
+      const data = await res.json();
+      const reply = data.choices?.[0]?.message?.content || 'Sorry, I could not generate a response.';
+      thinking.textContent = reply;
+      thinking.classList.remove('thinking');
+      chatHistory[chatHistory.length-1] = {role:'ai', text: reply};
+    } catch(e) {
+      thinking.textContent = 'Error: ' + e.message + '. The AI agent requires the Vercel deployment for full functionality.';
+      thinking.classList.remove('thinking');
+    }
+    btn.disabled = false;
+    input.focus();
+  }
+
+  function chipAsk(q) {
+    document.getElementById('chat-input').value = q;
+    sendChat();
+  }
+
+  function switchTab(name) {
+  document.querySelectorAll('.tab').forEach((t,i) => {
+    const names = ['transport','service','lane','origin','destination','carrier'];
+    t.classList.toggle('active', names[i] === name);
+  });
+  document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+  const tabMap = { transport:'tab-transport', service:'tab-service', lane:'tab-lane', origin:'tab-origin', destination:'tab-destination', carrier:'tab-carrier' };
+  document.getElementById(tabMap[name]).classList.add('active');
+}
+</script>
+</body>
+</html>
