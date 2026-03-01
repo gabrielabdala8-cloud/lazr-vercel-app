@@ -786,21 +786,15 @@ Answer concisely and accurately. Use CAD currency. Be direct and professional. I
 
     try {
       const context = buildDataContext();
-      const messages = [
-        { role: 'system', content: context },
-        ...chatHistory.filter(m => m.role !== 'ai' || !m.text.startsWith('⏳')).slice(-6).map(m => ({ role: m.role === 'user' ? 'user' : 'assistant', content: m.text })),
-        { role: 'user', content: msg }
-      ];
-
       const res = await fetch('/api/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ messages })
+        body: JSON.stringify({ message: msg, context })
       });
 
       if (!res.ok) throw new Error(`API error ${res.status}`);
       const data = await res.json();
-      const reply = data.choices?.[0]?.message?.content || 'Sorry, I could not generate a response.';
+      const reply = data.answer || 'Sorry, I could not generate a response.';
       thinking.textContent = reply;
       thinking.classList.remove('thinking');
       chatHistory[chatHistory.length-1] = {role:'ai', text: reply};
