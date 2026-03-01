@@ -478,7 +478,7 @@ function applyFilters() {
     if (transport && o.transport !== transport) return false;
     if (service && o.service !== service) return false;
     if (carrier && o.carrier !== carrier) return false;
-    if (orderNumber && !o.order.toLowerCase().includes(orderNumber)) return false;
+    if (orderNumber && !o.orderNum.toLowerCase().includes(orderNumber)) return false;
     if (dateFrom && o.date < dateFrom) return false;
     if (dateTo && o.date > dateTo) return false;
     return true;
@@ -500,7 +500,7 @@ function showOrderDropdown() {
   const dropdown = document.getElementById('order-dropdown');
   const inputEl = document.getElementById('filter-order-number');
   if (!input) { dropdown.classList.remove('show'); return; }
-  const uniqueOrders = [...new Set(allOrders.map(o => o.order))].sort();
+  const uniqueOrders = [...new Set(allOrders.map(o => o.orderNum))].sort();
   const matches = uniqueOrders.filter(o => o.toLowerCase().includes(input)).slice(0, 15);
   dropdown.innerHTML = matches.map(order => '<div class="order-option" onclick="selectOrder(\"' + order + '\")">'+order+'</div>').join('');
   if (matches.length > 0) {
