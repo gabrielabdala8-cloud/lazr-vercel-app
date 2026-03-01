@@ -665,7 +665,7 @@ function renderKpiTab(key, data, chartDiscId, chartOrdersId, tableId, topN) {
     const sign = d.disc >= 0 ? '+' : '';
     return `<tr>
       <td style="font-weight: 600; color: var(--cyan);">${idx + 1}</td>
-      <td><button onclick="showOrderDetails('${key}', '${d.label.replace(/'/g, "\\'")}')"`style="background: none; border: none; color: var(--cyan); cursor: pointer; text-decoration: underline;">${d.label}</button></td>
+      <td><button class="detail-btn" data-category="${key}" data-label="${d.label}" style="background: none; border: none; color: var(--cyan); cursor: pointer; text-decoration: underline;">${d.label}</button></td>
       <td>${d.orders.toLocaleString()}</td>
       <td>$${fmt(d.selling)}</td>
       <td>$${fmt(d.billed)}</td>
@@ -695,7 +695,7 @@ function renderCustomerTable(data) {
     const sign = d.disc >= 0 ? '+' : '';
     return `<tr>
       <td style="font-weight: 600; color: var(--cyan);">${idx + 1}</td>
-      <td><button onclick="showOrderDetails('org', '${d.label.replace(/'/g, "\\'")}')"`style="background: none; border: none; color: var(--cyan); cursor: pointer; text-decoration: underline;">${d.label}</button></td>
+      <td><button class="detail-btn" data-category="org" data-label="${d.label}" style="background: none; border: none; color: var(--cyan); cursor: pointer; text-decoration: underline;">${d.label}</button></td>
       <td>${d.orders.toLocaleString()}</td>
       <td>$${fmt(d.selling)}</td>
       <td>$${fmt(d.billed)}</td>
@@ -871,3 +871,12 @@ Answer concisely and accurately. Use CAD currency. Be direct and professional. I
   function closeDetailsModal() {
     document.getElementById('details-modal').classList.remove('show');
   }
+
+  // Add event listeners for detail buttons
+  document.addEventListener('click', function(e) {
+    if (e.target.classList.contains('detail-btn')) {
+      const category = e.target.dataset.category;
+      const label = e.target.dataset.label;
+      showOrderDetails(category, label);
+    }
+  });
