@@ -452,6 +452,13 @@ function processFile(file) {
           document.getElementById('btn-upload-new').style.display = 'block';
           document.getElementById('header-subtitle').textContent = 
             `${allOrders.length.toLocaleString()} orders loaded from ${file.name}`;
+          
+          // Send CSV to backend for persistence
+          fetch('/api/upload', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ filename: file.name, csvContent: e.target.result })
+          }).catch(err => console.error('Backend upload failed:', err));
         }, 400);
       }, 50);
     }, 50);
@@ -601,7 +608,11 @@ function groupByDest(orders) {
 // Render Dashboard
 // ============================================================
 function renderDashboard() {
-  const orders = filteredOrders;
+  let orders = filteredOrders;
+  const discrepanciesOnly = document.getElementById('filter-discrepancies-only').checked;
+  if (discrepanciesOnly) {
+    orders = orders.filter(o => Math.abs(o.disc) > 0.01);
+  }
   const totalOrders = orders.length;
   const totalSelling = orders.reduce((s,o) => s+o.selling, 0);
   const totalBilled = orders.reduce((s,o) => s+o.billed, 0);
@@ -738,7 +749,11 @@ function renderBarChart(canvasId, labels, data, bgColors, borderColors, yLabel) 
   let dataContext = null;
 
   function buildDataContext() {
-    const orders = filteredOrders.length > 0 ? filteredOrders : allOrders;
+    let orders = filteredOrders.length > 0 ? filteredOrders : allOrders;
+    const discrepanciesOnly = document.getElementById('filter-discrepancies-only').checked;
+    if (discrepanciesOnly) {
+      orders = orders.filter(o => Math.abs(o.disc) > 0.01);
+    }
     if (orders.length === 0) return null;
 
     const totalSelling = orders.reduce((s,o) => s+o.selling, 0);
@@ -873,6 +888,28 @@ Answer concisely and accurately. Use CAD currency. Be direct and professional. I
   const tabMap = { transport:'tab-transport', service:'tab-service', lane:'tab-lane', origin:'tab-origin', destination:'tab-destination', carrier:'tab-carrier' };
   document.getElementById(tabMap[name]).classList.add('active');
 }
+
+// Load CSV from backend on page load
+window.addEventListener('load', async function() {
+  try {
+    const res = await fetch('/api/csv-data');
+    const data = await res.json();
+    if (data.success && data.data) {
+      allOrders = parseCSV(data.data);
+      if (allOrders.length > 0) {
+        filteredOrders = allOrders.slice();
+        populateFilters();
+        renderDashboard();
+        document.getElementById('upload-zone').style.display = 'none';
+        document.getElementById('dashboard').style.display = 'block';
+        document.getElementById('btn-upload-new').style.display = 'block';
+        document.getElementById('header-subtitle').textContent = allOrders.length.toLocaleString() + ' orders loaded from ' + data.filename;
+      }
+    }
+  } catch (err) {
+    console.log('No stored CSV data on load');
+  }
+});
 </script>
 </body>
 </html>

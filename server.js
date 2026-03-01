@@ -8,16 +8,41 @@ app.use(cors());
 app.use(express.json({ limit: '100mb' }));
 app.use(express.static(path.join(__dirname, 'public')));
 
+// In-memory storage for CSV data (persists during server session)
+let csvData = null;
+let csvFilename = null;
+
 // Serve the dashboard HTML
 app.get('/', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
-// API endpoint for CSV upload (just acknowledge, data is processed client-side)
+// Get stored CSV data
+app.get('/api/csv-data', (req, res) => {
+  if (csvData) {
+    res.json({ success: true, data: csvData, filename: csvFilename });
+  } else {
+    res.json({ success: false, message: 'No CSV data stored' });
+  }
+});
+
+// API endpoint for CSV upload - store in memory
 app.post('/api/upload', (req, res) => {
-  const { filename, stats, totalRows } = req.body;
-  console.log(`[Upload] ${filename} - ${stats?.length || 0} customers, ${totalRows} rows`);
-  res.json({ success: true, message: 'CSV data received' });
+  const { filename, csvContent } = req.body;
+  
+  if (!csvContent) {
+    return res.status(400).json({ success: false, message: 'No CSV content provided' });
+  }
+  
+  try {
+    csvData = csvContent;
+    csvFilename = filename;
+    console.log(`[Upload] ${filename} stored in memory`);
+    res.json({ success: true, message: 'CSV data stored successfully' });
+  } catch (err) {
+    console.error('Upload error:', err);
+    res.status(500).json({ success: false, message: 'Upload failed' });
+  }
 });
 
 // Smart local AI analyzer - extracts real data from context
