@@ -88,21 +88,11 @@
   .tab-content.active { display: block; }
 
   .upload-new-btn { background: transparent; border: 1px solid var(--border); color: var(--muted); border-radius: 6px; padding: 6px 14px; cursor: pointer; font-size: 12px; margin-left: auto; }
-  .upload-new-btn:hover { border-color: var(--cyan); color: var(--cyan); }  /* Modal for order details */
-  #details-modal { display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.7); z-index: 2000; overflow-y: auto; }
-  #details-modal.show { display: block; }
-  .details-content { background: var(--bg); margin: 40px auto; width: 90%; max-width: 1000px; border-radius: 12px; padding: 24px; border: 1px solid var(--border); }
-  .details-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
-  .details-header h2 { color: var(--cyan); font-size: 18px; }
-  .details-close { background: transparent; border: 1px solid var(--border); color: var(--muted); cursor: pointer; padding: 6px 12px; border-radius: 6px; }
-  .details-close:hover { border-color: var(--cyan); color: var(--cyan); }
-  .details-table { width: 100%; border-collapse: collapse; font-size: 12px; }
-  .details-table th { background: var(--bg3); padding: 8px; text-align: left; border-bottom: 1px solid var(--border); }
-  .details-table td { padding: 8px; border-bottom: 1px solid var(--border); }
-  .details-table tr:hover { background: var(--bg3); }
+  .upload-new-btn:hover { border-color: var(--cyan); color: var(--cyan); }
 
-  <!-- AI Chat -->
-  #ai-chat-panel { position: fixed; bottom: 24px; right: 24px; width: 380px; z-index: 1000; }  #ai-chat-toggle { background: var(--cyan); color: #0d1117; border: none; border-radius: 50px; padding: 12px 20px; cursor: pointer; font-size: 14px; font-weight: 700; box-shadow: 0 4px 20px rgba(57,208,216,0.4); display: flex; align-items: center; gap: 8px; margin-left: auto; width: fit-content; }
+  /* AI Chat */
+  #ai-chat-panel { position: fixed; bottom: 24px; right: 24px; width: 380px; z-index: 1000; }
+  #ai-chat-toggle { background: var(--cyan); color: #0d1117; border: none; border-radius: 50px; padding: 12px 20px; cursor: pointer; font-size: 14px; font-weight: 700; box-shadow: 0 4px 20px rgba(57,208,216,0.4); display: flex; align-items: center; gap: 8px; margin-left: auto; width: fit-content; }
   #ai-chat-toggle:hover { background: #2bc0c8; }
   #ai-chat-box { background: var(--bg2); border: 1px solid var(--border); border-radius: 12px; margin-bottom: 8px; display: none; flex-direction: column; height: 460px; box-shadow: 0 8px 32px rgba(0,0,0,0.5); }
   #ai-chat-box.open { display: flex; }
@@ -270,29 +260,8 @@
   </div>
 </div>
 
-  <!-- Details Modal -->
-  <div id="details-modal" onclick="if(event.target===this) closeDetailsModal()">
-    <div class="details-content">
-      <div class="details-header">
-        <h2 id="details-title">Orders</h2>
-        <button class="details-close" onclick="closeDetailsModal()">✕ Close</button>
-      </div>
-      <table class="details-table">
-        <thead><tr>
-          <th>Order #</th>
-          <th>Customer</th>
-          <th>Quoted</th>
-          <th>Billed</th>
-          <th>Discrepancy</th>
-          <th>Status</th>
-        </tr></thead>
-        <tbody id="details-tbody"></tbody>
-      </table>
-    </div>
-  </div>
-
-  <!-- AI Chat Panel -->
-  <div id="ai-chat-panel">
+<!-- AI Chat Panel -->
+<div id="ai-chat-panel">
   <div id="ai-chat-box">
     <div class="chat-header">
       <div class="dot"></div>
@@ -665,7 +634,7 @@ function renderKpiTab(key, data, chartDiscId, chartOrdersId, tableId, topN) {
     const sign = d.disc >= 0 ? '+' : '';
     return `<tr>
       <td style="font-weight: 600; color: var(--cyan);">${idx + 1}</td>
-      <td><button class="detail-btn" data-category="${key}" data-label="${d.label}" style="background: none; border: none; color: var(--cyan); cursor: pointer; text-decoration: underline;">${d.label}</button></td>
+      <td>${d.label}</td>
       <td>${d.orders.toLocaleString()}</td>
       <td>$${fmt(d.selling)}</td>
       <td>$${fmt(d.billed)}</td>
@@ -695,7 +664,7 @@ function renderCustomerTable(data) {
     const sign = d.disc >= 0 ? '+' : '';
     return `<tr>
       <td style="font-weight: 600; color: var(--cyan);">${idx + 1}</td>
-      <td><button class="detail-btn" data-category="org" data-label="${d.label}" style="background: none; border: none; color: var(--cyan); cursor: pointer; text-decoration: underline;">${d.label}</button></td>
+      <td>${d.label}</td>
       <td>${d.orders.toLocaleString()}</td>
       <td>$${fmt(d.selling)}</td>
       <td>$${fmt(d.billed)}</td>
@@ -816,16 +785,22 @@ Answer concisely and accurately. Use CAD currency. Be direct and professional. I
     thinking.classList.add('thinking');
 
     try {
-
       const context = buildDataContext();
+      const messages = [
+        { role: 'system', content: context },
+        ...chatHistory.filter(m => m.role !== 'ai' || !m.text.startsWith('⏳')).slice(-6).map(m => ({ role: m.role === 'user' ? 'user' : 'assistant', content: m.text })),
+        { role: 'user', content: msg }
+      ];
+
       const res = await fetch('/api/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message: msg, context })
+        body: JSON.stringify({ messages })
       });
+
       if (!res.ok) throw new Error(`API error ${res.status}`);
       const data = await res.json();
-      const reply = data.answer || 'Sorry, I could not generate a response.';;
+      const reply = data.choices?.[0]?.message?.content || 'Sorry, I could not generate a response.';
       thinking.textContent = reply;
       thinking.classList.remove('thinking');
       chatHistory[chatHistory.length-1] = {role:'ai', text: reply};
@@ -854,29 +829,3 @@ Answer concisely and accurately. Use CAD currency. Be direct and professional. I
 </script>
 </body>
 </html>
-
-  function showOrderDetails(category, label) {
-    const orders = filteredOrders.filter(o => o[category] === label);
-    const modal = document.getElementById('details-modal');
-    const tbody = document.getElementById('details-tbody');
-    document.getElementById('details-title').textContent = label + ' - ' + orders.length + ' orders';
-    tbody.innerHTML = orders.map(o => {
-      const discColor = o.disc > 0.01 ? 'var(--red)' : o.disc < -0.01 ? 'var(--yellow)' : 'var(--green)';
-      const status = o.disc > 0.01 ? 'OVERCHARGE' : o.disc < -0.01 ? 'UNDERCHARGE' : 'MATCH';
-      return '<tr><td>' + o.orderNum + '</td><td>' + o.org + '</td><td>$' + fmt(o.selling) + '</td><td>$' + fmt(o.billed) + '</td><td style="color:' + discColor + '">' + (o.disc >= 0 ? '+' : '') + '$' + fmt(o.disc) + '</td><td>' + status + '</td></tr>';
-    }).join('');
-    modal.classList.add('show');
-  }
-
-  function closeDetailsModal() {
-    document.getElementById('details-modal').classList.remove('show');
-  }
-
-  // Add event listeners for detail buttons
-  document.addEventListener('click', function(e) {
-    if (e.target.classList.contains('detail-btn')) {
-      const category = e.target.dataset.category;
-      const label = e.target.dataset.label;
-      showOrderDetails(category, label);
-    }
-  });
