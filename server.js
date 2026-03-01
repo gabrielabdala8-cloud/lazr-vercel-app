@@ -28,6 +28,8 @@ app.post('/api/chat', async (req, res) => {
     const apiKey = process.env.VITE_FRONTEND_FORGE_API_KEY || process.env.BUILT_IN_FORGE_API_KEY || 'sk-test';
     const apiUrl = process.env.VITE_FRONTEND_FORGE_API_URL || process.env.BUILT_IN_FORGE_API_URL || 'https://forge.manus.ai/api/v1';
 
+    console.log(`[Chat] Sending request to ${apiUrl}/chat/completions`);
+
     const response = await fetch(`${apiUrl}/chat/completions`, {
       method: 'POST',
       headers: {
@@ -35,13 +37,21 @@ app.post('/api/chat', async (req, res) => {
         'Authorization': `Bearer ${apiKey}`
       },
       body: JSON.stringify({
-        model: 'gpt-4',
+        model: 'gpt-3.5-turbo',
         messages: [
           { role: 'system', content: context },
           { role: 'user', content: message }
-        ]
+        ],
+        temperature: 0.7,
+        max_tokens: 500
       })
     });
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      console.error('API error:', response.status, errorData);
+      return res.status(response.status).json({ error: 'API error', details: errorData });
+    }
 
     const data = await response.json();
     const answer = data.choices?.[0]?.message?.content || 'Unable to generate response';
