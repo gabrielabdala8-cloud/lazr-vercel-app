@@ -887,10 +887,11 @@ Answer concisely and accurately. Use CAD currency. Be direct and professional. I
     }
     document.getElementById('customer-modal-title').textContent = customerName + ' - ' + orders.length + ' orders' + discLabel;
     
+    console.log('First order:', orders[0]);
     tbody.innerHTML = orders.map((o, idx) => {
       const discColor = o.disc > 0.01 ? 'var(--red)' : o.disc < -0.01 ? 'var(--yellow)' : 'var(--green)';
       const status = o.disc > 0.01 ? 'OVERCHARGE' : o.disc < -0.01 ? 'UNDERCHARGE' : 'MATCH';
-      return '<tr><td>' + (idx + 1) + '</td><td>' + o.orderNum + '</td><td>$' + fmt(o.selling) + '</td><td>$' + fmt(o.billed) + '</td><td style="color:' + discColor + '">' + (o.disc >= 0 ? '+' : '') + '$' + fmt(o.disc) + '</td><td>' + status + '</td></tr>';
+      return '<tr><td>' + (idx + 1) + '</td><td>' + (o.orderNum || 'EMPTY') + '</td><td>$' + fmt(o.selling) + '</td><td>$' + fmt(o.billed) + '</td><td style="color:' + discColor + '">' + (o.disc >= 0 ? '+' : '') + '$' + fmt(o.disc) + '</td><td>' + status + '</td></tr>';
     }).join('');
     
     modal.classList.add('show');
