@@ -9,18 +9,13 @@ app.use(cors());
 app.use(express.json({ limit: '100mb' }));
 app.use(express.static(path.join(__dirname, 'public')));
 
-// In-memory storage for CSV data
-let csvData = null;
-let csvFilename = null;
-
-// Load CSV from data folder on startup (supports both .csv and .csv.gz)
+// Function to load CSV from data folder (called on each request to always get latest)
 function loadCSVFromFile() {
   try {
     const dataDir = path.join(__dirname, 'data');
     if (!fs.existsSync(dataDir)) {
       fs.mkdirSync(dataDir, { recursive: true });
-      console.log('[Startup] Created data folder');
-      return;
+      return null;
     }
     
     // Look for .csv.gz first (compressed), then .csv
@@ -39,35 +34,31 @@ function loadCSVFromFile() {
       if (isCompressed) {
         // Decompress gzip file
         const compressed = fs.readFileSync(csvPath);
-        csvData = zlib.gunzipSync(compressed).toString('utf-8');
-        csvFilename = csvFile.replace('.gz', '');
-        console.log(`[Startup] Loaded and decompressed CSV from data/${csvFile}`);
+        const csvData = zlib.gunzipSync(compressed).toString('utf-8');
+        const csvFilename = csvFile.replace('.gz', '');
+        return { data: csvData, filename: csvFilename };
       } else {
         // Read plain CSV
-        csvData = fs.readFileSync(csvPath, 'utf-8');
-        csvFilename = csvFile;
-        console.log(`[Startup] Loaded CSV from data/${csvFile}`);
+        const csvData = fs.readFileSync(csvPath, 'utf-8');
+        return { data: csvData, filename: csvFile };
       }
-    } else {
-      console.log('[Startup] No CSV files found in data folder');
     }
   } catch (err) {
-    console.error('[Startup] Error loading CSV:', err.message);
+    console.error('[CSV Load] Error:', err.message);
   }
+  return null;
 }
-
-// Load CSV on server start
-loadCSVFromFile();
 
 // Serve the dashboard HTML
 app.get('/', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
-// Get stored CSV data
+// Get stored CSV data - load fresh on each request
 app.get('/api/csv-data', (req, res) => {
-  if (csvData) {
-    res.json({ success: true, data: csvData, filename: csvFilename });
+  const csvInfo = loadCSVFromFile();
+  if (csvInfo) {
+    res.json({ success: true, data: csvInfo.data, filename: csvInfo.filename });
   } else {
     res.json({ success: false, message: 'No CSV data stored' });
   }
@@ -82,10 +73,8 @@ app.post('/api/upload', (req, res) => {
   }
   
   try {
-    csvData = csvContent;
-    csvFilename = filename;
-    console.log(`[Upload] ${filename} stored in memory`);
-    res.json({ success: true, message: 'CSV data stored successfully' });
+    console.log(`[Upload] ${filename} received`);
+    res.json({ success: true, message: 'CSV data processed successfully' });
   } catch (err) {
     console.error('Upload error:', err);
     res.status(500).json({ success: false, message: 'Upload failed' });
