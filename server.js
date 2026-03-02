@@ -2,6 +2,7 @@ const express = require('express');
 const cors = require('cors');
 const fs = require('fs');
 const path = require('path');
+const zlib = require('zlib');
 
 const app = express();
 app.use(cors());
@@ -12,7 +13,7 @@ app.use(express.static(path.join(__dirname, 'public')));
 let csvData = null;
 let csvFilename = null;
 
-// Load CSV from data folder on startup
+// Load CSV from data folder on startup (supports both .csv and .csv.gz)
 function loadCSVFromFile() {
   try {
     const dataDir = path.join(__dirname, 'data');
@@ -22,13 +23,31 @@ function loadCSVFromFile() {
       return;
     }
     
-    const files = fs.readdirSync(dataDir).filter(f => f.endsWith('.csv'));
+    // Look for .csv.gz first (compressed), then .csv
+    let files = fs.readdirSync(dataDir).filter(f => f.endsWith('.csv.gz'));
+    let isCompressed = true;
+    
+    if (files.length === 0) {
+      files = fs.readdirSync(dataDir).filter(f => f.endsWith('.csv'));
+      isCompressed = false;
+    }
+    
     if (files.length > 0) {
       const csvFile = files[0];
       const csvPath = path.join(dataDir, csvFile);
-      csvData = fs.readFileSync(csvPath, 'utf-8');
-      csvFilename = csvFile;
-      console.log(`[Startup] Loaded CSV from data/${csvFile}`);
+      
+      if (isCompressed) {
+        // Decompress gzip file
+        const compressed = fs.readFileSync(csvPath);
+        csvData = zlib.gunzipSync(compressed).toString('utf-8');
+        csvFilename = csvFile.replace('.gz', '');
+        console.log(`[Startup] Loaded and decompressed CSV from data/${csvFile}`);
+      } else {
+        // Read plain CSV
+        csvData = fs.readFileSync(csvPath, 'utf-8');
+        csvFilename = csvFile;
+        console.log(`[Startup] Loaded CSV from data/${csvFile}`);
+      }
     } else {
       console.log('[Startup] No CSV files found in data folder');
     }

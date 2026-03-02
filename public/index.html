@@ -354,6 +354,7 @@ function parseCSV(text) {
     carrier: idx['Carrier Name'],
     selling: idx['Selling Price (CAD)'],
     billed: idx['Billed Selling Price (CAD)'],
+    date: idx['Origin Pickup Date'],
   };
 
   const orders = [];
@@ -384,6 +385,7 @@ function parseCSV(text) {
       selling,
       billed,
       disc,
+      date: (cols[COL.date] || '').replace(/"/g,'').trim(),
     });
   }
   return orders;
