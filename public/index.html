@@ -861,10 +861,16 @@ Answer concisely and accurately. Use CAD currency. Be direct and professional. I
   }
 
   function showCustomerOrders(customerName) {
-    const orders = allOrders.filter(o => o.org === customerName);
+    let orders = allOrders.filter(o => o.org === customerName);
+    const discrepanciesOnly = document.getElementById("filter-discrepancies-only").checked;
+    if (discrepanciesOnly) {
+      orders = orders.filter(o => Math.abs(o.disc) > 0.01);
+    }
+    
     const modal = document.getElementById('customer-modal');
     const tbody = document.getElementById('customer-orders-tbody');
-    document.getElementById('customer-modal-title').textContent = customerName + ' - ' + orders.length + ' orders';
+    const discLabel = discrepanciesOnly ? " (Discrepancies Only)" : "";
+    document.getElementById('customer-modal-title').textContent = customerName + ' - ' + orders.length + ' orders' + discLabel;
     
     tbody.innerHTML = orders.map((o, idx) => {
       const discColor = o.disc > 0.01 ? 'var(--red)' : o.disc < -0.01 ? 'var(--yellow)' : 'var(--green)';

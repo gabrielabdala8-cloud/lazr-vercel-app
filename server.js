@@ -8,9 +8,37 @@ app.use(cors());
 app.use(express.json({ limit: '100mb' }));
 app.use(express.static(path.join(__dirname, 'public')));
 
-// In-memory storage for CSV data (persists during server session)
+// In-memory storage for CSV data
 let csvData = null;
 let csvFilename = null;
+
+// Load CSV from data folder on startup
+function loadCSVFromFile() {
+  try {
+    const dataDir = path.join(__dirname, 'data');
+    if (!fs.existsSync(dataDir)) {
+      fs.mkdirSync(dataDir, { recursive: true });
+      console.log('[Startup] Created data folder');
+      return;
+    }
+    
+    const files = fs.readdirSync(dataDir).filter(f => f.endsWith('.csv'));
+    if (files.length > 0) {
+      const csvFile = files[0];
+      const csvPath = path.join(dataDir, csvFile);
+      csvData = fs.readFileSync(csvPath, 'utf-8');
+      csvFilename = csvFile;
+      console.log(`[Startup] Loaded CSV from data/${csvFile}`);
+    } else {
+      console.log('[Startup] No CSV files found in data folder');
+    }
+  } catch (err) {
+    console.error('[Startup] Error loading CSV:', err.message);
+  }
+}
+
+// Load CSV on server start
+loadCSVFromFile();
 
 // Serve the dashboard HTML
 app.get('/', (req, res) => {
@@ -26,7 +54,7 @@ app.get('/api/csv-data', (req, res) => {
   }
 });
 
-// API endpoint for CSV upload - store in memory
+// API endpoint for CSV upload - store in memory (for local testing)
 app.post('/api/upload', (req, res) => {
   const { filename, csvContent } = req.body;
   
