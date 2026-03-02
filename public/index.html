@@ -865,13 +865,25 @@ Answer concisely and accurately. Use CAD currency. Be direct and professional. I
   function showCustomerOrders(customerName) {
     let orders = allOrders.filter(o => o.org === customerName);
     const discrepanciesOnly = document.getElementById("filter-discrepancies-only").checked;
+    const dateFrom = document.getElementById('filter-date-from').value;
+    const dateTo = document.getElementById('filter-date-to').value;
+    
     if (discrepanciesOnly) {
       orders = orders.filter(o => Math.abs(o.disc) > 0.01);
+    }
+    if (dateFrom) {
+      orders = orders.filter(o => o.date && o.date >= dateFrom);
+    }
+    if (dateTo) {
+      orders = orders.filter(o => o.date && o.date <= dateTo);
     }
     
     const modal = document.getElementById('customer-modal');
     const tbody = document.getElementById('customer-orders-tbody');
-    const discLabel = discrepanciesOnly ? " (Discrepancies Only)" : "";
+    let discLabel = discrepanciesOnly ? " (Discrepancies Only)" : "";
+    if (dateFrom || dateTo) {
+      discLabel += " (" + (dateFrom || "Any") + " to " + (dateTo || "Any") + ")";
+    }
     document.getElementById('customer-modal-title').textContent = customerName + ' - ' + orders.length + ' orders' + discLabel;
     
     tbody.innerHTML = orders.map((o, idx) => {
