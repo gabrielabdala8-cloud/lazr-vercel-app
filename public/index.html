@@ -93,6 +93,9 @@
   /* Customer Details Modal */
   #customer-modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.7); z-index: 2000; align-items: center; justify-content: center; }
   #customer-modal.show { display: flex; }
+  #carrier-modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.7); z-index: 2000; align-items: center; justify-content: center; }
+  #carrier-modal.show { display: flex; }
+  #carrier-modal .modal-content { background: var(--bg2); border: 1px solid var(--border); border-radius: 12px; max-width: 900px; width: 90%; max-height: 80vh; overflow-y: auto; padding: 24px; }
   .customer-modal-content { background: var(--bg2); border: 1px solid var(--border); border-radius: 12px; max-width: 900px; width: 90%; max-height: 80vh; overflow-y: auto; padding: 24px; }
   .customer-modal-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
   .customer-modal-header h2 { font-size: 18px; color: var(--cyan); }
@@ -295,6 +298,19 @@
   </div>
 </div>
 
+  <!-- Carrier Orders Modal -->
+  <div id="carrier-modal">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h2 id="carrier-modal-title">Carrier Orders</h2>
+        <button class="modal-close" onclick="closeCarrierModal()">✕</button>
+      </div>
+      <table id="carrier-orders-table">
+        <tbody id="carrier-orders-tbody"></tbody>
+      </table>
+    </div>
+  </div>
+
 <!-- AI Chat Panel -->
 <div id="ai-chat-panel">
   <div id="ai-chat-box">
@@ -381,7 +397,7 @@ function parseCSV(text) {
     
     const reconciled = parseFloat((cols[COL.reconciled] || '0').replace(/"/g,'')) || 0;
     const freightCost = parseFloat((cols[COL.freightCost] || '0').replace(/"/g,'')) || 0;
-    const carrierDisc = parseFloat((cols[COL.carrierDisc] || '0').replace(/"/g,'')) || 0;
+    const carrierDisc = reconciled - freightCost;  // Calculate from reconciled - freight
     
     const orderNum = (cols[COL.orderNum] || '').replace(/"/g,'').trim();
 
@@ -718,7 +734,8 @@ function renderKpiTab(key, data, chartDiscId, chartOrdersId, tableId, topN) {
     const sign = d.disc >= 0 ? '+' : '';
     const carrierBadge = d.carrierDisc > 0.01 ? 'badge-green' : d.carrierDisc < -0.01 ? 'badge-red' : 'badge-yellow';
     const carrierSign = d.carrierDisc >= 0 ? '+' : '';
-    return `<tr>
+    const clickHandler = key === 'carrier' ? `onclick="showCarrierOrders('${d.label}')" style="cursor:pointer"` : '';
+    return `<tr ${clickHandler}>
       <td style="font-weight: 600; color: var(--cyan);">${idx + 1}</td>
       <td>${d.label}</td>
       <td>${d.orders.toLocaleString()}</td>
@@ -917,6 +934,19 @@ Answer concisely and accurately. Use CAD currency. Be direct and professional. I
       orders = orders.filter(o => o.date && o.date <= dateTo);
     }
     
+    // Sort: largest discrepancies first, then by order number descending
+    orders.sort((a, b) => {
+      const aProblem = Math.abs(a.disc);
+      const bProblem = Math.abs(b.disc);
+      if (aProblem !== bProblem) {
+        return bProblem - aProblem;  // Descending by problem size (largest first)
+      }
+      // Then by order number descending (largest order numbers first)
+      const aNum = parseInt(a.orderNum || '0');
+      const bNum = parseInt(b.orderNum || '0');
+      return bNum - aNum;
+    });
+    
     const modal = document.getElementById('customer-modal');
     const tbody = document.getElementById('customer-orders-tbody');
     let discLabel = discrepanciesOnly ? " (Discrepancies Only)" : "";
@@ -944,6 +974,60 @@ Answer concisely and accurately. Use CAD currency. Be direct and professional. I
   function closeCustomerModal() {
     document.getElementById('customer-modal').classList.remove('show');
   }
+  function showCarrierOrders(carrierName) {
+    let orders = allOrders.filter(o => o.carrier === carrierName);
+    const discrepanciesOnly = document.getElementById("filter-discrepancies-only").checked;
+    const dateFrom = document.getElementById('filter-date-from').value;
+    const dateTo = document.getElementById('filter-date-to').value;
+    
+    if (discrepanciesOnly) {
+      orders = orders.filter(o => Math.abs(o.carrierDisc) > 0.01);
+    }
+    if (dateFrom) {
+      orders = orders.filter(o => o.date && o.date >= dateFrom);
+    }
+    if (dateTo) {
+      orders = orders.filter(o => o.date && o.date <= dateTo);
+    }
+    
+    // Sort: largest discrepancies first, then by order number descending
+    orders.sort((a, b) => {
+      const aProblem = Math.abs(a.carrierDisc);
+      const bProblem = Math.abs(b.carrierDisc);
+      if (aProblem !== bProblem) {
+        return bProblem - aProblem;  // Descending by problem size (largest first)
+      }
+      // Then by order number descending (largest order numbers first)
+      const aNum = parseInt(a.orderNum || '0');
+      const bNum = parseInt(b.orderNum || '0');
+      return bNum - aNum;
+    });
+    
+    const modal = document.getElementById('carrier-modal');
+    const tbody = document.getElementById('carrier-orders-tbody');
+    let discLabel = discrepanciesOnly ? " (Discrepancies Only)" : "";
+    if (dateFrom || dateTo) {
+      discLabel += " (" + (dateFrom || "Any") + " to " + (dateTo || "Any") + ")";
+    }
+    document.getElementById('carrier-modal-title').textContent = carrierName + ' - ' + orders.length + ' orders' + discLabel;
+    
+    tbody.innerHTML = orders.map((o, idx) => {
+      const carrierDiscColor = o.carrierDisc > 0.01 ? 'var(--green)' : o.carrierDisc < -0.01 ? 'var(--red)' : 'var(--yellow)';
+      const carrierStatus = o.carrierDisc > 0.01 ? 'GOOD' : o.carrierDisc < -0.01 ? 'ISSUE' : 'MATCH';
+      return '<tr><td style="font-weight:600;color:var(--cyan)">' + (idx + 1) + '</td><td colspan="6" style="padding:8px 0;border-bottom:1px solid var(--border)"><strong>Order #' + (o.orderNum || 'EMPTY') + '</strong></td></tr>' +
+        '<tr><td></td><td colspan="6" style="padding:4px 0;color:var(--muted);font-size:12px">👥 CUSTOMER ANALYSIS (Selling Price):</td></tr>' +
+        '<tr><td></td><td>$' + fmt(o.selling) + '</td><td>→</td><td>$' + fmt(o.billed) + '</td><td style="color:' + (o.disc > 0.01 ? 'var(--red)' : o.disc < -0.01 ? 'var(--yellow)' : 'var(--green)') + ';font-weight:600">' + (o.disc >= 0 ? '+' : '') + '$' + fmt(o.disc) + '</td><td></td><td></td></tr>' +
+        '<tr><td></td><td colspan="6" style="padding:4px 0;color:var(--muted);font-size:12px">🚚 CARRIER ANALYSIS (Cost):</td></tr>' +
+        '<tr><td></td><td>$' + fmt(o.reconciled) + '</td><td>→</td><td>$' + fmt(o.freightCost) + '</td><td style="color:' + carrierDiscColor + ';font-weight:600">' + (o.carrierDisc >= 0 ? '+' : '') + '$' + fmt(o.carrierDisc) + '</td><td style="color:' + carrierDiscColor + '">' + carrierStatus + '</td><td></td></tr>';
+    }).join('');
+    
+    modal.classList.add('show');
+  }
+
+  function closeCarrierModal() {
+    document.getElementById('carrier-modal').classList.remove('show');
+  }
+
 
   function switchTab(name) {
   document.querySelectorAll('.tab').forEach((t,i) => {
