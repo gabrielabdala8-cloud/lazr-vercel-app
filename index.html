@@ -956,13 +956,17 @@ Answer concisely and accurately. Use CAD currency. Be direct and professional. I
 }
 
 // Load CSV from backend on page load
-window.addEventListener('load', async function() {
+async function autoLoadCSV() {
   try {
+    console.log('[AutoLoad] Attempting to fetch CSV data...');
     const res = await fetch('/api/csv-data');
     const data = await res.json();
+    console.log('[AutoLoad] Response:', data);
     if (data.success && data.data) {
+      console.log('[AutoLoad] CSV data received, parsing...');
       allOrders = parseCSV(data.data);
       if (allOrders.length > 0) {
+        console.log('[AutoLoad] Parsed', allOrders.length, 'orders');
         filteredOrders = allOrders.slice();
         populateFilters();
         renderDashboard();
@@ -970,11 +974,27 @@ window.addEventListener('load', async function() {
         document.getElementById('dashboard').style.display = 'block';
         document.getElementById('btn-upload-new').style.display = 'block';
         document.getElementById('header-subtitle').textContent = allOrders.length.toLocaleString() + ' orders loaded from ' + data.filename;
+        console.log('[AutoLoad] SUCCESS - Dashboard loaded');
+        return true;
       }
+    } else {
+      console.log('[AutoLoad] No data in response:', data);
     }
   } catch (err) {
-    console.log('No stored CSV data on load');
+    console.error('[AutoLoad] Error:', err.message);
   }
+  return false;
+}
+
+window.addEventListener('load', async function() {
+  console.log('[Load] Page loaded, waiting 2 seconds before auto-load...');
+  setTimeout(async () => {
+    const loaded = await autoLoadCSV();
+    if (!loaded) {
+      console.log('[Load] First attempt failed, retrying in 3 seconds...');
+      setTimeout(autoLoadCSV, 3000);
+    }
+  }, 2000);
 });
 </script>
 </body>
