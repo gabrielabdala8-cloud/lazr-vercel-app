@@ -360,6 +360,9 @@ function parseCSV(text) {
     selling: idx['Selling Price (CAD)'],
     billed: idx['Billed Selling Price (CAD)'],
     date: idx['Origin Pickup Date'],
+    reconciled: idx['Reconciled Quote Price cad'],
+    freightCost: idx['Freight Cost(CAD)'],
+    carrierDisc: idx['Carrier Discrepancy (CAD)'],
   };
   console.log('COL mapping:', COL);
 
@@ -376,8 +379,11 @@ function parseCSV(text) {
     const billed = parseFloat((cols[COL.billed] || '0').replace(/"/g,'')) || 0;
     const disc = billed - selling;
     
+    const reconciled = parseFloat((cols[COL.reconciled] || '0').replace(/"/g,'')) || 0;
+    const freightCost = parseFloat((cols[COL.freightCost] || '0').replace(/"/g,'')) || 0;
+    const carrierDisc = parseFloat((cols[COL.carrierDisc] || '0').replace(/"/g,'')) || 0;
+    
     const orderNum = (cols[COL.orderNum] || '').replace(/"/g,'').trim();
-    if (i === 1) console.log('DEBUG: First row - COL.orderNum:', COL.orderNum, 'cols length:', cols.length, 'orderNum value:', orderNum, 'cols[0]:', cols[0]);
 
     orders.push({
       orderNum: orderNum,
@@ -394,6 +400,9 @@ function parseCSV(text) {
       selling,
       billed,
       disc,
+      reconciled,
+      freightCost,
+      carrierDisc,
       date: (cols[COL.date] || '').replace(/"/g,'').trim(),
     });
   }
@@ -585,15 +594,21 @@ function groupBy(orders, key) {
   const map = new Map();
   for (const o of orders) {
     const k = o[key] || 'Unknown';
-    if (!map.has(k)) map.set(k, { label: k, orders: 0, selling: 0, billed: 0, disc: 0, over: 0, under: 0, match: 0 });
+    if (!map.has(k)) map.set(k, { label: k, orders: 0, selling: 0, billed: 0, disc: 0, over: 0, under: 0, match: 0, reconciled: 0, freightCost: 0, carrierDisc: 0, carrierOver: 0, carrierUnder: 0, carrierMatch: 0 });
     const g = map.get(k);
     g.orders++;
     g.selling += o.selling;
     g.billed += o.billed;
     g.disc += o.disc;
+    g.reconciled += o.reconciled;
+    g.freightCost += o.freightCost;
+    g.carrierDisc += o.carrierDisc;
     if (o.disc > 0.01) g.over++;
     else if (o.disc < -0.01) g.under++;
     else g.match++;
+    if (o.carrierDisc > 0.01) g.carrierOver++;
+    else if (o.carrierDisc < -0.01) g.carrierUnder++;
+    else g.carrierMatch++;
   }
   return [...map.values()];
 }
@@ -602,15 +617,21 @@ function groupByDest(orders) {
   const map = new Map();
   for (const o of orders) {
     const k = o.destCity ? `${o.destCity}, ${o.destState || o.destCountry}` : (o.destCountry || 'Unknown');
-    if (!map.has(k)) map.set(k, { label: k, orders: 0, selling: 0, billed: 0, disc: 0, over: 0, under: 0, match: 0 });
+    if (!map.has(k)) map.set(k, { label: k, orders: 0, selling: 0, billed: 0, disc: 0, over: 0, under: 0, match: 0, reconciled: 0, freightCost: 0, carrierDisc: 0, carrierOver: 0, carrierUnder: 0, carrierMatch: 0 });
     const g = map.get(k);
     g.orders++;
     g.selling += o.selling;
     g.billed += o.billed;
     g.disc += o.disc;
+    g.reconciled += o.reconciled;
+    g.freightCost += o.freightCost;
+    g.carrierDisc += o.carrierDisc;
     if (o.disc > 0.01) g.over++;
     else if (o.disc < -0.01) g.under++;
     else g.match++;
+    if (o.carrierDisc > 0.01) g.carrierOver++;
+    else if (o.carrierDisc < -0.01) g.carrierUnder++;
+    else g.carrierMatch++;
   }
   return [...map.values()];
 }
