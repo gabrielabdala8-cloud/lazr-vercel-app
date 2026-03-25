@@ -90,6 +90,20 @@
   .upload-new-btn { background: transparent; border: 1px solid var(--border); color: var(--muted); border-radius: 6px; padding: 6px 14px; cursor: pointer; font-size: 12px; margin-left: auto; }
   .upload-new-btn:hover { border-color: var(--cyan); color: var(--cyan); }
 
+  /* Customer Details Modal */
+  #customer-modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.7); z-index: 2000; align-items: center; justify-content: center; }
+  #customer-modal.show { display: flex; }
+  .customer-modal-content { background: var(--bg2); border: 1px solid var(--border); border-radius: 12px; max-width: 900px; width: 90%; max-height: 80vh; overflow-y: auto; padding: 24px; }
+  .customer-modal-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
+  .customer-modal-header h2 { font-size: 18px; color: var(--cyan); }
+  .customer-modal-close { background: none; border: none; color: var(--muted); cursor: pointer; font-size: 24px; }
+  .customer-modal-close:hover { color: var(--cyan); }
+  .customer-orders-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+  .customer-orders-table th { background: var(--bg3); color: var(--muted); padding: 10px; text-align: left; border-bottom: 1px solid var(--border); }
+  .customer-orders-table td { padding: 10px; border-bottom: 1px solid var(--border); white-space: normal; }
+  .customer-orders-table tr:hover td { background: var(--bg3); }
+  .customer-orders-table th:nth-child(2), .customer-orders-table td:nth-child(2) { min-width: 120px; }
+
   /* AI Chat */
   #ai-chat-panel { position: fixed; bottom: 24px; right: 24px; width: 380px; z-index: 1000; }
   #ai-chat-toggle { background: var(--cyan); color: #0d1117; border: none; border-radius: 50px; padding: 12px 20px; cursor: pointer; font-size: 14px; font-weight: 700; box-shadow: 0 4px 20px rgba(57,208,216,0.4); display: flex; align-items: center; gap: 8px; margin-left: auto; width: fit-content; }
@@ -260,6 +274,27 @@
   </div>
 </div>
 
+<!-- Customer Details Modal -->
+<div id="customer-modal" onclick="if(event.target===this) closeCustomerModal()">
+  <div class="customer-modal-content">
+    <div class="customer-modal-header">
+      <h2 id="customer-modal-title">Customer Orders</h2>
+      <button class="customer-modal-close" onclick="closeCustomerModal()">×</button>
+    </div>
+    <table class="customer-orders-table">
+      <thead><tr>
+        <th>#</th>
+        <th>Order #</th>
+        <th>Quoted (CAD)</th>
+        <th>Billed (CAD)</th>
+        <th>Discrepancy (CAD)</th>
+        <th>Status</th>
+      </tr></thead>
+      <tbody id="customer-orders-tbody"></tbody>
+    </table>
+  </div>
+</div>
+
 <!-- AI Chat Panel -->
 <div id="ai-chat-panel">
   <div id="ai-chat-box">
@@ -304,7 +339,11 @@ function parseCSV(text) {
   // Parse header
   const headers = parseCSVLine(lines[0]);
   const idx = {};
-  headers.forEach((h, i) => { idx[h.trim().replace(/"/g,'')] = i; });
+  headers.forEach((h, i) => { 
+    const cleanHeader = h.trim().replace(/"/g,'');
+    idx[cleanHeader] = i;
+    console.log('Header', i + ':', cleanHeader);
+  });
 
   const COL = {
     orderNum: idx['Order Number'],
@@ -320,7 +359,12 @@ function parseCSV(text) {
     carrier: idx['Carrier Name'],
     selling: idx['Selling Price (CAD)'],
     billed: idx['Billed Selling Price (CAD)'],
+    date: idx['Origin Pickup Date'],
+    reconciled: idx['Reconciled Quote Price cad'],
+    freightCost: idx['Freight Cost(CAD)'],
+    carrierDisc: idx['Carrier Discrepancy (CAD)'],
   };
+  console.log('COL mapping:', COL);
 
   const orders = [];
   for (let i = 1; i < lines.length; i++) {
@@ -334,9 +378,15 @@ function parseCSV(text) {
     const selling = parseFloat((cols[COL.selling] || '0').replace(/"/g,'')) || 0;
     const billed = parseFloat((cols[COL.billed] || '0').replace(/"/g,'')) || 0;
     const disc = billed - selling;
+    
+    const reconciled = parseFloat((cols[COL.reconciled] || '0').replace(/"/g,'')) || 0;
+    const freightCost = parseFloat((cols[COL.freightCost] || '0').replace(/"/g,'')) || 0;
+    const carrierDisc = parseFloat((cols[COL.carrierDisc] || '0').replace(/"/g,'')) || 0;
+    
+    const orderNum = (cols[COL.orderNum] || '').replace(/"/g,'').trim();
 
     orders.push({
-      orderNum: (cols[COL.orderNum] || '').replace(/"/g,''),
+      orderNum: orderNum,
       status,
       transport: (cols[COL.transport] || '').replace(/"/g,'').trim() || 'Unknown',
       service: (cols[COL.service] || '').replace(/"/g,'').trim() || 'Unknown',
@@ -350,6 +400,10 @@ function parseCSV(text) {
       selling,
       billed,
       disc,
+      reconciled,
+      freightCost,
+      carrierDisc,
+      date: (cols[COL.date] || '').replace(/"/g,'').trim(),
     });
   }
   return orders;
@@ -418,6 +472,13 @@ function processFile(file) {
           document.getElementById('btn-upload-new').style.display = 'block';
           document.getElementById('header-subtitle').textContent = 
             `${allOrders.length.toLocaleString()} orders loaded from ${file.name}`;
+          
+          // Send CSV to backend for persistence
+          fetch('/api/upload', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ filename: file.name, csvContent: e.target.result })
+          }).catch(err => console.error('Backend upload failed:', err));
         }, 400);
       }, 50);
     }, 50);
@@ -533,15 +594,21 @@ function groupBy(orders, key) {
   const map = new Map();
   for (const o of orders) {
     const k = o[key] || 'Unknown';
-    if (!map.has(k)) map.set(k, { label: k, orders: 0, selling: 0, billed: 0, disc: 0, over: 0, under: 0, match: 0 });
+    if (!map.has(k)) map.set(k, { label: k, orders: 0, selling: 0, billed: 0, disc: 0, over: 0, under: 0, match: 0, reconciled: 0, freightCost: 0, carrierDisc: 0, carrierOver: 0, carrierUnder: 0, carrierMatch: 0 });
     const g = map.get(k);
     g.orders++;
     g.selling += o.selling;
     g.billed += o.billed;
     g.disc += o.disc;
+    g.reconciled += o.reconciled;
+    g.freightCost += o.freightCost;
+    g.carrierDisc += o.carrierDisc;
     if (o.disc > 0.01) g.over++;
     else if (o.disc < -0.01) g.under++;
     else g.match++;
+    if (o.carrierDisc > 0.01) g.carrierOver++;
+    else if (o.carrierDisc < -0.01) g.carrierUnder++;
+    else g.carrierMatch++;
   }
   return [...map.values()];
 }
@@ -550,15 +617,21 @@ function groupByDest(orders) {
   const map = new Map();
   for (const o of orders) {
     const k = o.destCity ? `${o.destCity}, ${o.destState || o.destCountry}` : (o.destCountry || 'Unknown');
-    if (!map.has(k)) map.set(k, { label: k, orders: 0, selling: 0, billed: 0, disc: 0, over: 0, under: 0, match: 0 });
+    if (!map.has(k)) map.set(k, { label: k, orders: 0, selling: 0, billed: 0, disc: 0, over: 0, under: 0, match: 0, reconciled: 0, freightCost: 0, carrierDisc: 0, carrierOver: 0, carrierUnder: 0, carrierMatch: 0 });
     const g = map.get(k);
     g.orders++;
     g.selling += o.selling;
     g.billed += o.billed;
     g.disc += o.disc;
+    g.reconciled += o.reconciled;
+    g.freightCost += o.freightCost;
+    g.carrierDisc += o.carrierDisc;
     if (o.disc > 0.01) g.over++;
     else if (o.disc < -0.01) g.under++;
     else g.match++;
+    if (o.carrierDisc > 0.01) g.carrierOver++;
+    else if (o.carrierDisc < -0.01) g.carrierUnder++;
+    else g.carrierMatch++;
   }
   return [...map.values()];
 }
@@ -567,7 +640,11 @@ function groupByDest(orders) {
 // Render Dashboard
 // ============================================================
 function renderDashboard() {
-  const orders = filteredOrders;
+  let orders = filteredOrders;
+  const discrepanciesOnly = document.getElementById('filter-discrepancies-only').checked;
+  if (discrepanciesOnly) {
+    orders = orders.filter(o => Math.abs(o.disc) > 0.01);
+  }
   const totalOrders = orders.length;
   const totalSelling = orders.reduce((s,o) => s+o.selling, 0);
   const totalBilled = orders.reduce((s,o) => s+o.billed, 0);
@@ -617,21 +694,30 @@ function renderKpiTab(key, data, chartDiscId, chartOrdersId, tableId, topN) {
 
   // Table
   const tbl = document.getElementById(tableId);
-  tbl.innerHTML = `<thead><tr>
-    <th>#</th>
-    <th>${key.charAt(0).toUpperCase()+key.slice(1)}</th>
-    <th>Orders</th>
-    <th>Quoted (CAD)</th>
-    <th>Billed (CAD)</th>
-    <th>Discrepancy (CAD)</th>
-    <th>Disc %</th>
-    <th>Overcharged</th>
-    <th>Undercharged</th>
-    <th>Match</th>
-  </tr></thead><tbody>${data.map((d, idx) => {
+  tbl.innerHTML = `<thead>
+    <tr style="background: var(--bg3);">
+      <th colspan="2"></th>
+      <th colspan="4" style="text-align:center;border-bottom:2px solid var(--cyan)">👥 CUSTOMER ANALYSIS (Selling Price)</th>
+      <th colspan="4" style="text-align:center;border-bottom:2px solid var(--cyan)">🚚 CARRIER ANALYSIS (Cost)</th>
+    </tr>
+    <tr>
+      <th>#</th>
+      <th>${key.charAt(0).toUpperCase()+key.slice(1)}</th>
+      <th>Orders</th>
+      <th>Quoted (CAD)</th>
+      <th>Billed (CAD)</th>
+      <th>Discrepancy (CAD)</th>
+      <th>Disc %</th>
+      <th>Reconciled (CAD)</th>
+      <th>Freight (CAD)</th>
+      <th>Carrier Disc (CAD)</th>
+    </tr>
+  </thead><tbody>${data.map((d, idx) => {
     const discPct = d.selling > 0 ? ((d.disc/d.selling)*100).toFixed(2) : '0.00';
     const badge = d.disc > 0.01 ? 'badge-red' : d.disc < -0.01 ? 'badge-yellow' : 'badge-green';
     const sign = d.disc >= 0 ? '+' : '';
+    const carrierBadge = d.carrierDisc > 0.01 ? 'badge-green' : d.carrierDisc < -0.01 ? 'badge-red' : 'badge-yellow';
+    const carrierSign = d.carrierDisc >= 0 ? '+' : '';
     return `<tr>
       <td style="font-weight: 600; color: var(--cyan);">${idx + 1}</td>
       <td>${d.label}</td>
@@ -640,9 +726,9 @@ function renderKpiTab(key, data, chartDiscId, chartOrdersId, tableId, topN) {
       <td>$${fmt(d.billed)}</td>
       <td><span class="badge ${badge}">${sign}$${fmt(d.disc)}</span></td>
       <td>${discPct}%</td>
-      <td>${d.over.toLocaleString()}</td>
-      <td>${d.under.toLocaleString()}</td>
-      <td>${d.match.toLocaleString()}</td>
+      <td>$${fmt(d.reconciled)}</td>
+      <td>$${fmt(d.freightCost)}</td>
+      <td><span class="badge ${carrierBadge}">${carrierSign}$${fmt(d.carrierDisc)}</span></td>
     </tr>`;
   }).join('')}</tbody>`;
 }
@@ -664,7 +750,7 @@ function renderCustomerTable(data) {
     const sign = d.disc >= 0 ? '+' : '';
     return `<tr>
       <td style="font-weight: 600; color: var(--cyan);">${idx + 1}</td>
-      <td>${d.label}</td>
+      <td><a href="#" onclick="showCustomerOrders('${d.label}'); return false;" style="color: var(--cyan); text-decoration: none; cursor: pointer;">${d.label}</a></td>
       <td>${d.orders.toLocaleString()}</td>
       <td>$${fmt(d.selling)}</td>
       <td>$${fmt(d.billed)}</td>
@@ -704,7 +790,11 @@ function renderBarChart(canvasId, labels, data, bgColors, borderColors, yLabel) 
   let dataContext = null;
 
   function buildDataContext() {
-    const orders = filteredOrders.length > 0 ? filteredOrders : allOrders;
+    let orders = filteredOrders.length > 0 ? filteredOrders : allOrders;
+    const discrepanciesOnly = document.getElementById('filter-discrepancies-only').checked;
+    if (discrepanciesOnly) {
+      orders = orders.filter(o => Math.abs(o.disc) > 0.01);
+    }
     if (orders.length === 0) return null;
 
     const totalSelling = orders.reduce((s,o) => s+o.selling, 0);
@@ -811,6 +901,50 @@ Answer concisely and accurately. Use CAD currency. Be direct and professional. I
     sendChat();
   }
 
+  function showCustomerOrders(customerName) {
+    let orders = allOrders.filter(o => o.org === customerName);
+    const discrepanciesOnly = document.getElementById("filter-discrepancies-only").checked;
+    const dateFrom = document.getElementById('filter-date-from').value;
+    const dateTo = document.getElementById('filter-date-to').value;
+    
+    if (discrepanciesOnly) {
+      orders = orders.filter(o => Math.abs(o.disc) > 0.01);
+    }
+    if (dateFrom) {
+      orders = orders.filter(o => o.date && o.date >= dateFrom);
+    }
+    if (dateTo) {
+      orders = orders.filter(o => o.date && o.date <= dateTo);
+    }
+    
+    const modal = document.getElementById('customer-modal');
+    const tbody = document.getElementById('customer-orders-tbody');
+    let discLabel = discrepanciesOnly ? " (Discrepancies Only)" : "";
+    if (dateFrom || dateTo) {
+      discLabel += " (" + (dateFrom || "Any") + " to " + (dateTo || "Any") + ")";
+    }
+    document.getElementById('customer-modal-title').textContent = customerName + ' - ' + orders.length + ' orders' + discLabel;
+    
+    console.log('First order:', orders[0]);
+    tbody.innerHTML = orders.map((o, idx) => {
+      const discColor = o.disc > 0.01 ? 'var(--red)' : o.disc < -0.01 ? 'var(--yellow)' : 'var(--green)';
+      const status = o.disc > 0.01 ? 'OVERCHARGE' : o.disc < -0.01 ? 'UNDERCHARGE' : 'MATCH';
+      const carrierDiscColor = o.carrierDisc > 0.01 ? 'var(--green)' : o.carrierDisc < -0.01 ? 'var(--red)' : 'var(--yellow)';
+      const carrierStatus = o.carrierDisc > 0.01 ? 'GOOD' : o.carrierDisc < -0.01 ? 'ISSUE' : 'MATCH';
+      return '<tr><td style="font-weight:600;color:var(--cyan)">' + (idx + 1) + '</td><td colspan="6" style="padding:8px 0;border-bottom:1px solid var(--border)"><strong>Order #' + (o.orderNum || 'EMPTY') + '</strong></td></tr>' +
+        '<tr><td></td><td colspan="6" style="padding:4px 0;color:var(--muted);font-size:12px">👥 CUSTOMER ANALYSIS (Selling Price):</td></tr>' +
+        '<tr><td></td><td>$' + fmt(o.selling) + '</td><td>→</td><td>$' + fmt(o.billed) + '</td><td style="color:' + discColor + ';font-weight:600">' + (o.disc >= 0 ? '+' : '') + '$' + fmt(o.disc) + '</td><td style="color:' + discColor + '">' + status + '</td><td></td></tr>' +
+        '<tr><td></td><td colspan="6" style="padding:4px 0;color:var(--muted);font-size:12px">🚚 CARRIER ANALYSIS (Cost):</td></tr>' +
+        '<tr><td></td><td>$' + fmt(o.reconciled) + '</td><td>→</td><td>$' + fmt(o.freightCost) + '</td><td style="color:' + carrierDiscColor + ';font-weight:600">' + (o.carrierDisc >= 0 ? '+' : '') + '$' + fmt(o.carrierDisc) + '</td><td style="color:' + carrierDiscColor + '">' + carrierStatus + '</td><td></td></tr>';
+    }).join('')
+    
+    modal.classList.add('show');
+  }
+
+  function closeCustomerModal() {
+    document.getElementById('customer-modal').classList.remove('show');
+  }
+
   function switchTab(name) {
   document.querySelectorAll('.tab').forEach((t,i) => {
     const names = ['transport','service','lane','origin','destination','carrier'];
@@ -820,6 +954,28 @@ Answer concisely and accurately. Use CAD currency. Be direct and professional. I
   const tabMap = { transport:'tab-transport', service:'tab-service', lane:'tab-lane', origin:'tab-origin', destination:'tab-destination', carrier:'tab-carrier' };
   document.getElementById(tabMap[name]).classList.add('active');
 }
+
+// Load CSV from backend on page load
+window.addEventListener('load', async function() {
+  try {
+    const res = await fetch('/api/csv-data');
+    const data = await res.json();
+    if (data.success && data.data) {
+      allOrders = parseCSV(data.data);
+      if (allOrders.length > 0) {
+        filteredOrders = allOrders.slice();
+        populateFilters();
+        renderDashboard();
+        document.getElementById('upload-zone').style.display = 'none';
+        document.getElementById('dashboard').style.display = 'block';
+        document.getElementById('btn-upload-new').style.display = 'block';
+        document.getElementById('header-subtitle').textContent = allOrders.length.toLocaleString() + ' orders loaded from ' + data.filename;
+      }
+    }
+  } catch (err) {
+    console.log('No stored CSV data on load');
+  }
+});
 </script>
 </body>
 </html>
