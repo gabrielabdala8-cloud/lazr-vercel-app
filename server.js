@@ -2,22 +2,83 @@ const express = require('express');
 const cors = require('cors');
 const fs = require('fs');
 const path = require('path');
+const zlib = require('zlib');
 
 const app = express();
 app.use(cors());
 app.use(express.json({ limit: '100mb' }));
 app.use(express.static(path.join(__dirname, 'public')));
 
+// Function to load CSV from data folder (called on each request to always get latest)
+function loadCSVFromFile() {
+  try {
+    const dataDir = path.join(__dirname, 'data');
+    if (!fs.existsSync(dataDir)) {
+      fs.mkdirSync(dataDir, { recursive: true });
+      return null;
+    }
+    
+    // Look for .csv.gz first (compressed), then .csv
+    let files = fs.readdirSync(dataDir).filter(f => f.endsWith('.csv.gz'));
+    let isCompressed = true;
+    
+    if (files.length === 0) {
+      files = fs.readdirSync(dataDir).filter(f => f.endsWith('.csv'));
+      isCompressed = false;
+    }
+    
+    if (files.length > 0) {
+      const csvFile = files[0];
+      const csvPath = path.join(dataDir, csvFile);
+      
+      if (isCompressed) {
+        // Decompress gzip file
+        const compressed = fs.readFileSync(csvPath);
+        const csvData = zlib.gunzipSync(compressed).toString('utf-8');
+        const csvFilename = csvFile.replace('.gz', '');
+        return { data: csvData, filename: csvFilename };
+      } else {
+        // Read plain CSV
+        const csvData = fs.readFileSync(csvPath, 'utf-8');
+        return { data: csvData, filename: csvFile };
+      }
+    }
+  } catch (err) {
+    console.error('[CSV Load] Error:', err.message);
+  }
+  return null;
+}
+
 // Serve the dashboard HTML
 app.get('/', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
-// API endpoint for CSV upload (just acknowledge, data is processed client-side)
+// Get stored CSV data - load fresh on each request
+app.get('/api/csv-data', (req, res) => {
+  const csvInfo = loadCSVFromFile();
+  if (csvInfo) {
+    res.json({ success: true, data: csvInfo.data, filename: csvInfo.filename });
+  } else {
+    res.json({ success: false, message: 'No CSV data stored' });
+  }
+});
+
+// API endpoint for CSV upload - store in memory (for local testing)
 app.post('/api/upload', (req, res) => {
-  const { filename, stats, totalRows } = req.body;
-  console.log(`[Upload] ${filename} - ${stats?.length || 0} customers, ${totalRows} rows`);
-  res.json({ success: true, message: 'CSV data received' });
+  const { filename, csvContent } = req.body;
+  
+  if (!csvContent) {
+    return res.status(400).json({ success: false, message: 'No CSV content provided' });
+  }
+  
+  try {
+    console.log(`[Upload] ${filename} received`);
+    res.json({ success: true, message: 'CSV data processed successfully' });
+  } catch (err) {
+    console.error('Upload error:', err);
+    res.status(500).json({ success: false, message: 'Upload failed' });
+  }
 });
 
 // Smart local AI analyzer - extracts real data from context

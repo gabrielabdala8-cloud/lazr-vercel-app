@@ -694,30 +694,21 @@ function renderKpiTab(key, data, chartDiscId, chartOrdersId, tableId, topN) {
 
   // Table
   const tbl = document.getElementById(tableId);
-  tbl.innerHTML = `<thead>
-    <tr style="background: var(--bg3);">
-      <th colspan="2"></th>
-      <th colspan="4" style="text-align:center;border-bottom:2px solid var(--cyan)">👥 CUSTOMER ANALYSIS (Selling Price)</th>
-      <th colspan="4" style="text-align:center;border-bottom:2px solid var(--cyan)">🚚 CARRIER ANALYSIS (Cost)</th>
-    </tr>
-    <tr>
-      <th>#</th>
-      <th>${key.charAt(0).toUpperCase()+key.slice(1)}</th>
-      <th>Orders</th>
-      <th>Quoted (CAD)</th>
-      <th>Billed (CAD)</th>
-      <th>Discrepancy (CAD)</th>
-      <th>Disc %</th>
-      <th>Reconciled (CAD)</th>
-      <th>Freight (CAD)</th>
-      <th>Carrier Disc (CAD)</th>
-    </tr>
-  </thead><tbody>${data.map((d, idx) => {
+  tbl.innerHTML = `<thead><tr>
+    <th>#</th>
+    <th>${key.charAt(0).toUpperCase()+key.slice(1)}</th>
+    <th>Orders</th>
+    <th>Quoted (CAD)</th>
+    <th>Billed (CAD)</th>
+    <th>Discrepancy (CAD)</th>
+    <th>Disc %</th>
+    <th>Overcharged</th>
+    <th>Undercharged</th>
+    <th>Match</th>
+  </tr></thead><tbody>${data.map((d, idx) => {
     const discPct = d.selling > 0 ? ((d.disc/d.selling)*100).toFixed(2) : '0.00';
     const badge = d.disc > 0.01 ? 'badge-red' : d.disc < -0.01 ? 'badge-yellow' : 'badge-green';
     const sign = d.disc >= 0 ? '+' : '';
-    const carrierBadge = d.carrierDisc > 0.01 ? 'badge-green' : d.carrierDisc < -0.01 ? 'badge-red' : 'badge-yellow';
-    const carrierSign = d.carrierDisc >= 0 ? '+' : '';
     return `<tr>
       <td style="font-weight: 600; color: var(--cyan);">${idx + 1}</td>
       <td>${d.label}</td>
@@ -726,9 +717,9 @@ function renderKpiTab(key, data, chartDiscId, chartOrdersId, tableId, topN) {
       <td>$${fmt(d.billed)}</td>
       <td><span class="badge ${badge}">${sign}$${fmt(d.disc)}</span></td>
       <td>${discPct}%</td>
-      <td>$${fmt(d.reconciled)}</td>
-      <td>$${fmt(d.freightCost)}</td>
-      <td><span class="badge ${carrierBadge}">${carrierSign}$${fmt(d.carrierDisc)}</span></td>
+      <td>${d.over.toLocaleString()}</td>
+      <td>${d.under.toLocaleString()}</td>
+      <td>${d.match.toLocaleString()}</td>
     </tr>`;
   }).join('')}</tbody>`;
 }
@@ -929,14 +920,8 @@ Answer concisely and accurately. Use CAD currency. Be direct and professional. I
     tbody.innerHTML = orders.map((o, idx) => {
       const discColor = o.disc > 0.01 ? 'var(--red)' : o.disc < -0.01 ? 'var(--yellow)' : 'var(--green)';
       const status = o.disc > 0.01 ? 'OVERCHARGE' : o.disc < -0.01 ? 'UNDERCHARGE' : 'MATCH';
-      const carrierDiscColor = o.carrierDisc > 0.01 ? 'var(--green)' : o.carrierDisc < -0.01 ? 'var(--red)' : 'var(--yellow)';
-      const carrierStatus = o.carrierDisc > 0.01 ? 'GOOD' : o.carrierDisc < -0.01 ? 'ISSUE' : 'MATCH';
-      return '<tr><td style="font-weight:600;color:var(--cyan)">' + (idx + 1) + '</td><td colspan="6" style="padding:8px 0;border-bottom:1px solid var(--border)"><strong>Order #' + (o.orderNum || 'EMPTY') + '</strong></td></tr>' +
-        '<tr><td></td><td colspan="6" style="padding:4px 0;color:var(--muted);font-size:12px">👥 CUSTOMER ANALYSIS (Selling Price):</td></tr>' +
-        '<tr><td></td><td>$' + fmt(o.selling) + '</td><td>→</td><td>$' + fmt(o.billed) + '</td><td style="color:' + discColor + ';font-weight:600">' + (o.disc >= 0 ? '+' : '') + '$' + fmt(o.disc) + '</td><td style="color:' + discColor + '">' + status + '</td><td></td></tr>' +
-        '<tr><td></td><td colspan="6" style="padding:4px 0;color:var(--muted);font-size:12px">🚚 CARRIER ANALYSIS (Cost):</td></tr>' +
-        '<tr><td></td><td>$' + fmt(o.reconciled) + '</td><td>→</td><td>$' + fmt(o.freightCost) + '</td><td style="color:' + carrierDiscColor + ';font-weight:600">' + (o.carrierDisc >= 0 ? '+' : '') + '$' + fmt(o.carrierDisc) + '</td><td style="color:' + carrierDiscColor + '">' + carrierStatus + '</td><td></td></tr>';
-    }).join('')
+      return '<tr><td>' + (idx + 1) + '</td><td>' + (o.orderNum || 'EMPTY') + '</td><td>$' + fmt(o.selling) + '</td><td>$' + fmt(o.billed) + '</td><td style="color:' + discColor + '">' + (o.disc >= 0 ? '+' : '') + '$' + fmt(o.disc) + '</td><td>' + status + '</td></tr>';
+    }).join('');
     
     modal.classList.add('show');
   }
@@ -956,17 +941,13 @@ Answer concisely and accurately. Use CAD currency. Be direct and professional. I
 }
 
 // Load CSV from backend on page load
-async function autoLoadCSV() {
+window.addEventListener('load', async function() {
   try {
-    console.log('[AutoLoad] Attempting to fetch CSV data...');
     const res = await fetch('/api/csv-data');
     const data = await res.json();
-    console.log('[AutoLoad] Response:', data);
     if (data.success && data.data) {
-      console.log('[AutoLoad] CSV data received, parsing...');
       allOrders = parseCSV(data.data);
       if (allOrders.length > 0) {
-        console.log('[AutoLoad] Parsed', allOrders.length, 'orders');
         filteredOrders = allOrders.slice();
         populateFilters();
         renderDashboard();
@@ -974,27 +955,11 @@ async function autoLoadCSV() {
         document.getElementById('dashboard').style.display = 'block';
         document.getElementById('btn-upload-new').style.display = 'block';
         document.getElementById('header-subtitle').textContent = allOrders.length.toLocaleString() + ' orders loaded from ' + data.filename;
-        console.log('[AutoLoad] SUCCESS - Dashboard loaded');
-        return true;
       }
-    } else {
-      console.log('[AutoLoad] No data in response:', data);
     }
   } catch (err) {
-    console.error('[AutoLoad] Error:', err.message);
+    console.log('No stored CSV data on load');
   }
-  return false;
-}
-
-window.addEventListener('load', async function() {
-  console.log('[Load] Page loaded, waiting 2 seconds before auto-load...');
-  setTimeout(async () => {
-    const loaded = await autoLoadCSV();
-    if (!loaded) {
-      console.log('[Load] First attempt failed, retrying in 3 seconds...');
-      setTimeout(autoLoadCSV, 3000);
-    }
-  }, 2000);
 });
 </script>
 </body>
