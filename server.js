@@ -460,5 +460,7 @@ Answer concisely and professionally.\`;
   </script>
 </body>
 </html>
-  \`;
+  `;
 }
+
+module.exports = app;
