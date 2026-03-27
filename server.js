@@ -87,3 +87,4 @@ function getDashboardHTML() {
     return '<h1>Error loading dashboard</h1>';
   }
 }
+
