@@ -13,6 +13,32 @@ app.get('/', (req, res) => {
 });
 
 // API endpoint for CSV upload
+// API endpoint for CSV data auto-load
+app.get('/api/csv-data', async (req, res) => {
+  try {
+    const zlib = require('zlib');
+    const filePath = path.join(__dirname, 'data.csv.gz');
+    
+    if (!fs.existsSync(filePath)) {
+      console.log('[CSV] data.csv.gz not found');
+      return res.json({ success: false, error: 'No data file' });
+    }
+    
+    const fileBuffer = fs.readFileSync(filePath);
+    const decompressed = zlib.gunzipSync(fileBuffer).toString('utf8');
+    
+    console.log('[CSV] Auto-loading data.csv.gz');
+    res.json({ 
+      success: true, 
+      data: decompressed,
+      filename: 'data.csv.gz'
+    });
+  } catch (err) {
+    console.error('[CSV] Error:', err.message);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
 app.post('/api/upload', (req, res) => {
   const { filename, stats, totalRows } = req.body;
   console.log(`[Upload] ${filename} - ${stats.length} customers, ${totalRows} rows`);
