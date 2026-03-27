@@ -959,7 +959,7 @@ Answer concisely and accurately. Use CAD currency. Be direct and professional. I
     tbody.innerHTML = orders.map((o, idx) => {
       const discColor = o.disc > 0.01 ? 'var(--red)' : o.disc < -0.01 ? 'var(--yellow)' : 'var(--green)';
       const status = o.disc > 0.01 ? 'OVERCHARGE' : o.disc < -0.01 ? 'UNDERCHARGE' : 'MATCH';
-      const carrierDiscColor = o.carrierDisc < -0.01 ? 'var(--red)' : o.carrierDisc > 0.01 ? 'var(--yellow)' : 'var(--green)';
+      const carrierDiscColor = Math.abs(o.carrierDisc) > 0.01 ? 'var(--red)' : 'var(--green)';
       const carrierStatus = o.carrierDisc < -0.01 ? 'OVERCHARGE' : o.carrierDisc > 0.01 ? 'UNDERCHARGE' : 'MATCH';
       return '<tr><td style="font-weight:600;color:var(--cyan)">' + (idx + 1) + '</td><td colspan="6" style="padding:8px 0;border-bottom:1px solid var(--border)"><strong>Order #' + (o.orderNum || 'EMPTY') + '</strong></td></tr>' +
         '<tr><td></td><td colspan="6" style="padding:4px 0;color:var(--muted);font-size:12px">👥 CUSTOMER ANALYSIS (Selling Price):</td></tr>' +
@@ -1012,7 +1012,7 @@ Answer concisely and accurately. Use CAD currency. Be direct and professional. I
     document.getElementById('carrier-modal-title').textContent = carrierName + ' - ' + orders.length + ' orders' + discLabel;
     
     tbody.innerHTML = orders.map((o, idx) => {
-      const carrierDiscColor = o.carrierDisc < -0.01 ? 'var(--red)' : o.carrierDisc > 0.01 ? 'var(--yellow)' : 'var(--green)';
+      const carrierDiscColor = Math.abs(o.carrierDisc) > 0.01 ? 'var(--red)' : 'var(--green)';
       const carrierStatus = o.carrierDisc < -0.01 ? 'OVERCHARGE' : o.carrierDisc > 0.01 ? 'UNDERCHARGE' : 'MATCH';
       return '<tr><td style="font-weight:600;color:var(--cyan)">' + (idx + 1) + '</td><td colspan="6" style="padding:8px 0;border-bottom:1px solid var(--border)"><strong>Order #' + (o.orderNum || 'EMPTY') + '</strong></td></tr>' +
         '<tr><td></td><td colspan="6" style="padding:4px 0;color:var(--muted);font-size:12px">👥 CUSTOMER ANALYSIS (Selling Price):</td></tr>' +
